@@ -14,7 +14,7 @@ function mapDiary(raw: SydleDaisyDiary): DaisyDiary {
     title: raw.tytle ?? '',
     subtitle: raw.subtytle ?? '',
     content: raw.content ?? '',
-    active: raw.Active ?? false,
+    active: raw.active ?? false,
     date: raw.date,
     createdAt: toDate(raw._creationDate),
     updatedAt: raw._lastUpdateDate ? toDate(raw._lastUpdateDate) : undefined,
@@ -27,7 +27,7 @@ export async function getActiveDiaries(token: string): Promise<DaisyDiary[]> {
     SYDLE_CLASS.daisyDiary,
     SYDLE_METHOD.search,
     {
-      query: { term: { Active: true } },
+      query: { term: { active: true } },
       sort: [{ _creationDate: { order: 'desc' } }],
       size: 20,
     },
@@ -78,7 +78,7 @@ export async function createDiary(
       tytle: title,
       subtytle: subtitle,
       content,
-      Active: true,
+      active: true,
       ...(date ? { date } : {}),
     },
     token,
@@ -98,7 +98,7 @@ export async function toggleDiaryActive(
     SYDLE_METHOD.patch,
     {
       _id: id,
-      _operationsList: [{ op: 'replace', path: '/Active', value: active }],
+      _operationsList: [{ op: 'replace', path: '/active', value: active }],
     },
     token,
   )
