@@ -1,9 +1,4 @@
 // Server-side only — orquestra geração do Diário da Daisy
-// Arquitetura desacoplada para permitir extensões futuras:
-//   - generateDiaryImage(diary, token) — capa do diário
-//   - generateDiaryAudio(diary, token) — resumo em áudio
-//   - generateDiaryNewsletter(diary, token) — newsletter
-//   - generateDiaryVideo(diary, token) — vídeo curto
 import { sydleCall, parseSearch } from '@/lib/sydle/client'
 import { SYDLE_PACKAGE, SYDLE_CLASS, SYDLE_METHOD } from '@/lib/sydle/constants'
 import { fetchCountryMap } from '@/lib/sydle/helpers'
@@ -18,6 +13,8 @@ import { mapGuess } from '@/lib/mappers'
 import type { SydleGame, SydleResult, SydleGuess } from '@/lib/types'
 import type { GenerateDiaryResult, NewsResult } from './types'
 
+const BRT_OFFSET_MS = -3 * 60 * 60 * 1000
+
 interface DiaryAIResponse {
   title: string
   subtitle: string
@@ -30,54 +27,101 @@ interface GuessAIResponse {
   result2: number
 }
 
+interface RecentResultEntry {
+  country1: string
+  country2: string
+  result1: number
+  result2: number
+  group: string
+  phase: string
+  finishedAt: string  // "YYYY-MM-DD HH:MM BRT"
+}
+
 export async function generateDailyDiary(token: string): Promise<GenerateDiaryResult> {
   const startTime = Date.now()
+  const now = Date.now()
 
   const today = new Date()
   const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}T00:00:00Z`
 
   const [prompts, gamesRaw, resultsRaw, guessesRaw, upcomingRaw, recentDiaries, countryMap] = await Promise.all([
     getAllPrompts(token),
+    // Jogos recentes (data DESC) — cobre ~3-4 dias da Copa
     sydleCall(SYDLE_PACKAGE, SYDLE_CLASS.games, SYDLE_METHOD.search,
-      { query: { match_all: {} }, sort: [{ date: { order: 'desc' } }], size: 15 }, token),
+      { query: { match_all: {} }, sort: [{ date: { order: 'desc' } }], size: 20 }, token),
+    // Todos os resultados para montar o resultMap
     sydleCall(SYDLE_PACKAGE, SYDLE_CLASS.results, SYDLE_METHOD.search,
-      { query: { match_all: {} }, sort: [{ _creationDate: { order: 'desc' } }], size: 10 }, token),
+      { query: { match_all: {} }, sort: [{ _creationDate: { order: 'desc' } }], size: 50 }, token),
     sydleCall(SYDLE_PACKAGE, SYDLE_CLASS.guesses, SYDLE_METHOD.search,
       { query: { match_all: {} }, size: 1000 }, token),
+    // Próximos jogos — próximas 24h
     sydleCall(SYDLE_PACKAGE, SYDLE_CLASS.games, SYDLE_METHOD.search,
-      { query: { range: { date: { gte: Date.now(), lte: Date.now() + 86_400_000 } } }, sort: [{ date: { order: 'asc' } }], size: 10 },
-      token),
+      { query: { range: { date: { gte: now, lte: now + 86_400_000 } } },
+        sort: [{ date: { order: 'asc' } }], size: 10 }, token),
     getMostRecentDiaries(3, token).catch(() => []),
     fetchCountryMap(token).catch(() => new Map()),
   ])
 
   const promptMap = new Map(prompts.map((p) => [p.identifier, p]))
-  const personaPrompt      = promptMap.get(DAISY_PROMPT_IDENTIFIERS.persona)?.prompt      ?? ''
-  const diaryPrompt        = promptMap.get(DAISY_PROMPT_IDENTIFIERS.diary)?.prompt        ?? ''
-  const guessesPrompt      = promptMap.get(DAISY_PROMPT_IDENTIFIERS.guesses)?.prompt      ?? ''
-  const newsSummaryPrompt  = promptMap.get(DAISY_PROMPT_IDENTIFIERS.newsSummary)?.prompt  ?? ''
+  const personaPrompt       = promptMap.get(DAISY_PROMPT_IDENTIFIERS.persona)?.prompt       ?? ''
+  const diaryPrompt         = promptMap.get(DAISY_PROMPT_IDENTIFIERS.diary)?.prompt         ?? ''
+  const guessesPrompt       = promptMap.get(DAISY_PROMPT_IDENTIFIERS.guesses)?.prompt       ?? ''
+  const newsSummaryPrompt   = promptMap.get(DAISY_PROMPT_IDENTIFIERS.newsSummary)?.prompt   ?? ''
   const matchAnalysisPrompt = promptMap.get(DAISY_PROMPT_IDENTIFIERS.matchAnalysis)?.prompt ?? ''
 
   const recentGames   = parseSearch<SydleGame>(gamesRaw)
-  const recentResults = parseSearch<SydleResult>(resultsRaw)
+  const allResults    = parseSearch<SydleResult>(resultsRaw)
   const allGuesses    = parseSearch<SydleGuess>(guessesRaw).map(mapGuess)
   const upcomingGames = parseSearch<SydleGame>(upcomingRaw)
 
-  const resultMap = new Map(recentResults.map((r) => [r.game?._id, r]))
+  const resultMap = new Map(allResults.map((r) => [r.game?._id, r]))
 
   const countryName = (id: string | undefined) =>
     (id ? countryMap.get(id)?.country : undefined) ?? '?'
 
-  const now = Date.now()
+  // ── Janela de tempo para resultados "recentes" ──────────────────────────────
+  // Usa a criação do último diário como referência, com fallback de 48h
+  const last48h = now - 48 * 60 * 60 * 1000
+  const lastDiaryTs = recentDiaries[0]?.createdAt
+    ? new Date(recentDiaries[0].createdAt).getTime()
+    : last48h
+  const recentCutoff = Math.min(lastDiaryTs, last48h)
 
-  // Últimos 5 jogos com resultado registrado no sistema
-  const finishedGames = recentGames.filter((g) => resultMap.has(g._id)).slice(0, 5)
-  const matchContext = finishedGames.map((g) => {
-    const r = resultMap.get(g._id)!
-    return `${countryName(g.country1?._id)} ${r.result1} x ${r.result2} ${countryName(g.country2?._id)}`
-  }).join('\n') || 'Nenhum jogo com resultado no sistema ainda.'
+  // ── Resultados recentes estruturados (jogos encerrados desde o corte) ───────
+  const recentResultEntries: RecentResultEntry[] = []
+  const allFinishedForContext: string[] = []
 
-  // Jogos que já aconteceram mas o resultado ainda não foi lançado no SYDLE
+  for (const g of recentGames) {
+    const r = resultMap.get(g._id)
+    if (!r) continue
+    const gameTs = typeof g.date === 'number' ? g.date : Number(g.date)
+    if (isNaN(gameTs) || gameTs > now) continue  // futuro — ignorar
+
+    // Para contexto histórico completo
+    allFinishedForContext.push(
+      `${countryName(g.country1?._id)} ${r.result1} x ${r.result2} ${countryName(g.country2?._id)}`
+    )
+
+    // Apenas jogos dentro da janela recente
+    if (gameTs < recentCutoff) continue
+
+    const brtDate = new Date(gameTs + BRT_OFFSET_MS)
+    recentResultEntries.push({
+      country1:   countryName(g.country1?._id),
+      country2:   countryName(g.country2?._id),
+      result1:    r.result1,
+      result2:    r.result2,
+      group:      g.group ?? '',
+      phase:      g.phase ?? '',
+      finishedAt: brtDate.toISOString().replace('T', ' ').slice(0, 16) + ' BRT',
+    })
+  }
+
+  const hasRecentResults   = recentResultEntries.length > 0
+  const recentResultsCount = recentResultEntries.length
+  const upcomingGamesCount = upcomingGames.length
+
+  // ── Jogos que aconteceram mas sem resultado no sistema ───────────────────────
   const pendingResultGames = recentGames
     .filter((g) => {
       if (resultMap.has(g._id)) return false
@@ -90,7 +134,7 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
       pendingResultGames.map((g) => `${countryName(g.country1?._id)} vs ${countryName(g.country2?._id)}`).join('\n')
     : ''
 
-  // Top 10 ranking calculado inline
+  // ── Top 10 ranking ───────────────────────────────────────────────────────────
   const userAccum = new Map<string, { name: string; pts: number }>()
   for (const guess of allGuesses) {
     const result = resultMap.get(guess.matchId)
@@ -107,36 +151,61 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
     ? topUsers.map(([, u], i) => `${i + 1}. ${u.name} — ${u.pts} pts`).join('\n')
     : 'Ranking ainda sem pontuação.'
 
-  // Próximos jogos
+  // ── Próximos jogos ───────────────────────────────────────────────────────────
   const upcomingContext = upcomingGames.length
     ? upcomingGames.map((g) => `${countryName(g.country1?._id)} vs ${countryName(g.country2?._id)}`).join('\n')
     : 'Nenhum jogo nas próximas 24h.'
 
-  // Notícias das fontes externas (sem expor URLs na IA)
+  // ── Notícias ─────────────────────────────────────────────────────────────────
   const newsResult: NewsResult = await fetchAndSummarizeNews(newsSummaryPrompt, personaPrompt)
   const newsContext = buildNewsContext(newsResult.summary)
+  const newsHighlightsCount = newsResult.items.length
 
-  // Posts anteriores — até 3, disponibilizados como contexto opcional
+  // ── Diagnóstico do contexto ──────────────────────────────────────────────────
+  console.log(
+    `[daisy] Context — Recent Results: ${recentResultsCount} | Upcoming Games: ${upcomingGamesCount} | News Highlights: ${newsHighlightsCount}`
+  )
+
+  // ── Posts anteriores ─────────────────────────────────────────────────────────
   const previousPostsContext = recentDiaries.length > 0
     ? '\n\nSeus posts anteriores (contexto opcional — do mais recente ao mais antigo):\n' +
       recentDiaries.map((d, i) => {
         const excerpt = d.content.replace(/[#*`>\-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 300)
         return `--- Post ${i + 1} (${d.createdAt.slice(0, 10)}) ---\nTítulo: ${d.title}\nSubtítulo: ${d.subtitle}\nExcerto: ${excerpt}…`
       }).join('\n\n') +
-      '\n\nEsses posts são apenas referência de contexto. Conecte com o post anterior somente se houver uma continuidade natural que enriqueça a narrativa — caso contrário, ignore-os completamente e escreva como uma edição independente.'
+      '\n\nEsses posts são apenas referência de contexto. Conecte com post anterior só se houver continuidade natural — caso contrário, escreva como edição independente.'
     : ''
 
-  // Instrução explícita para Markdown e sem citação de fontes
+  // ── Contexto de resultados recentes (bloco principal do prompt) ───────────────
+  const recentResultsBlock = hasRecentResults
+    ? '\n\n⚠️ JOGOS ENCERRADOS RECENTEMENTE — OBRIGATÓRIO COMENTAR NO INÍCIO DO POST:\n' +
+      JSON.stringify(recentResultEntries, null, 2)
+    : '\n\nNenhum jogo encerrado no período recente.'
+
+  // Histórico completo para referência adicional
+  const fullMatchHistoryContext = allFinishedForContext.length > 0
+    ? '\n\nHistórico de resultados (referência):\n' + allFinishedForContext.slice(0, 10).join('\n')
+    : ''
+
+  // Instrução de alerta quando há resultados — reforça a prioridade
+  const recentResultsInstruction = hasRecentResults
+    ? `\n\n⚠️ INSTRUÇÃO OBRIGATÓRIA: Há ${recentResultsCount} jogo(s) encerrado(s) recentemente. ` +
+      `O post DEVE COMEÇAR comentando esses resultados específicos (times, placar, destaques). ` +
+      `NÃO inicie com notícias gerais, ranking ou próximos jogos.`
+    : ''
+
   const markdownInstruction = `
 Retorne o conteúdo formatado em Markdown com seções usando ## para subtítulos, listas com *, negrito com ** e separadores com ---. Use seu próprio estilo — não cite portais, fontes ou sites. Escreva como se as ideias fossem suas, em primeira pessoa.
 `
 
-  // Gera diário via OpenAI
+  // ── Gera diário via OpenAI ───────────────────────────────────────────────────
   const diaryUserMessage = [
     diaryPrompt,
+    recentResultsInstruction,
     markdownInstruction,
-    `\n\nResultados recentes (placar registrado no sistema):\n${matchContext}`,
+    recentResultsBlock,
     pendingResultContext,
+    fullMatchHistoryContext,
     `\n\nPróximos jogos (24h):\n${upcomingContext}`,
     `\n\nTop 10 ranking:\n${rankingContext}`,
     newsContext,
@@ -150,25 +219,29 @@ Retorne o conteúdo formatado em Markdown com seções usando ## para subtítulo
   const diary = await createDiary(
     sanitize(diaryJson.title ?? 'Diário da Daisy'),
     sanitize(diaryJson.subtitle ?? ''),
-    diaryJson.content ?? '',  // Markdown — não sanitizar com strip-tags
+    diaryJson.content ?? '',
     token,
     dateStr,
   )
 
-  // Palpites para os próximos jogos — fluxo em 2 passos (falha não é fatal)
+  // ── Palpites — fluxo em 2 passos (falha não é fatal) ────────────────────────
   if (upcomingGames.length > 0 && guessesPrompt) {
     try {
       const gamesCtx = upcomingGames.map((g) =>
         `gameId: ${g._id}, ${countryName(g.country1?._id)} vs ${countryName(g.country2?._id)}`
       ).join('\n')
 
-      // Passo 1 — análise intermediária por jogo (DAISY_MATCH_ANALYSIS)
+      const fullResultsCtx = allFinishedForContext.slice(0, 10).join('\n') || 'Nenhum resultado registrado ainda.'
+
+      // Passo 1 — DAISY_MATCH_ANALYSIS: análise por jogo
       let analysisContext = ''
       if (matchAnalysisPrompt) {
         try {
           const analysisInput = [
             matchAnalysisPrompt,
-            `\n\nResultados recentes (placar registrado):\n${matchContext}`,
+            hasRecentResults
+              ? '\n\nResultados recentes:\n' + JSON.stringify(recentResultEntries, null, 2)
+              : '\n\nResultados recentes:\n' + (fullResultsCtx || 'Nenhum resultado registrado ainda.'),
             pendingResultContext,
             newsContext,
             `\n\nJogos para análise:\n${gamesCtx}`,
@@ -187,12 +260,12 @@ Retorne o conteúdo formatado em Markdown com seções usando ## para subtítulo
         }
       }
 
-      // Passo 2 — gera palpites com contexto enriquecido (DAISY_DAILY_GUESSES)
+      // Passo 2 — DAISY_DAILY_GUESSES: gera palpites com contexto completo
       const guessRaw = await callOpenAI(
         personaPrompt,
         [
           guessesPrompt,
-          `\n\nResultados recentes:\n${matchContext}`,
+          `\n\nResultados recentes:\n${fullResultsCtx}`,
           pendingResultContext,
           newsContext,
           analysisContext,
@@ -223,10 +296,14 @@ Retorne o conteúdo formatado em Markdown com seções usando ## para subtítulo
   return {
     diary,
     newsResult,
-    newsAnalyzed: newsResult.successUrls.length,
-    gamesConsidered: finishedGames.length + upcomingGames.length,
+    newsAnalyzed:        newsResult.successUrls.length,
+    recentResultsCount,
+    upcomingGamesCount,
+    newsHighlightsCount,
+    hasRecentResults,
+    gamesConsidered:     allFinishedForContext.length + upcomingGames.length,
     executionMs,
-    generatedAt: new Date().toISOString(),
+    generatedAt:         new Date().toISOString(),
   }
 }
 

@@ -34,6 +34,10 @@ export interface GenerateDiaryResult {
   diary: DaisyDiary
   newsResult: NewsResult
   newsAnalyzed: number
+  recentResultsCount: number
+  upcomingGamesCount: number
+  newsHighlightsCount: number
+  hasRecentResults: boolean
   gamesConsidered: number
   executionMs: number
   generatedAt: string

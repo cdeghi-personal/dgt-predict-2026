@@ -275,11 +275,13 @@ export default function AdminDaisyPage() {
               <p><span className="font-semibold text-mid-gray">Data:</span> {formatDate(generateResult.diary.createdAt)}</p>
             </div>
 
-            {/* Estatísticas */}
-            <div className="grid grid-cols-3 gap-2">
-              <StatCell label="Notícias" value={String(generateResult.newsAnalyzed)} />
-              <StatCell label="Jogos" value={String(generateResult.gamesConsidered)} />
-              <StatCell label="Tempo" value={formatMs(generateResult.executionMs)} />
+            {/* Diagnóstico do contexto */}
+            <div className="rounded-lg bg-white border border-green-200 p-2 text-xs font-mono text-mid-gray space-y-0.5">
+              <p className="font-semibold text-dark text-[10px] uppercase tracking-wide mb-1">Daisy Context</p>
+              <p>Recent Results: <span className={generateResult.recentResultsCount > 0 ? 'text-green-700 font-bold' : 'text-gray-400'}>{generateResult.recentResultsCount}</span>{generateResult.hasRecentResults ? ' ✅' : ''}</p>
+              <p>Upcoming Games: <span className="text-dark font-semibold">{generateResult.upcomingGamesCount}</span></p>
+              <p>News Highlights: <span className="text-dark font-semibold">{generateResult.newsHighlightsCount}</span></p>
+              <p>Execution: <span className="text-dark font-semibold">{formatMs(generateResult.executionMs)}</span></p>
             </div>
 
             {/* Botão visualizar */}
