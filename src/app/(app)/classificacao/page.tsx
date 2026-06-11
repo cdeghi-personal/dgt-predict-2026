@@ -6,7 +6,11 @@ import { CountryFlag } from '@/components/features/CountryFlag'
 import { PageLoader } from '@/components/ui/LoadingSpinner'
 import { useMatches } from '@/hooks/useMatches'
 import { calculateGroupStandings } from '@/lib/standings'
+import { PHASE_LABELS } from '@/lib/utils/dates'
 import type { TeamStanding } from '@/lib/standings'
+import type { Match, MatchPhase } from '@/lib/types'
+
+const KNOCKOUT_PHASES: MatchPhase[] = ['oitavas', 'quartas', 'semifinais', 'finais']
 
 export default function ClassificacaoPage() {
   const { data: matches, isLoading } = useMatches()
@@ -16,9 +20,16 @@ export default function ClassificacaoPage() {
     [matches],
   )
 
+  const knockoutByPhase = useMemo(() => {
+    if (!matches) return []
+    return KNOCKOUT_PHASES
+      .map((phase) => ({ phase, games: matches.filter((m) => m.phase === phase) }))
+      .filter((p) => p.games.length > 0)
+  }, [matches])
+
   if (isLoading) return <PageLoader />
 
-  if (standings.size === 0) {
+  if (standings.size === 0 && knockoutByPhase.length === 0) {
     return (
       <div className="text-center py-16 text-mid-gray">
         <p className="text-4xl mb-3">🏆</p>
@@ -32,14 +43,27 @@ export default function ClassificacaoPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-bold text-dark">Classificação</h1>
-        <p className="text-sm text-mid-gray">Fase de grupos · Copa do Mundo 2026</p>
+        <p className="text-sm text-mid-gray">Copa do Mundo 2026</p>
       </div>
 
-      {[...standings.entries()].map(([group, teams]) => (
-        <GroupTable key={group} group={group} teams={teams} />
-      ))}
+      {standings.size > 0 && (
+        <>
+          <h2 className="text-sm font-bold text-dark uppercase tracking-wide -mb-3">Fase de Grupos</h2>
+          {[...standings.entries()].map(([group, teams]) => (
+            <GroupTable key={group} group={group} teams={teams} />
+          ))}
+          <Legend />
+        </>
+      )}
 
-      <Legend />
+      {knockoutByPhase.length > 0 && (
+        <>
+          <h2 className="text-sm font-bold text-dark uppercase tracking-wide -mb-3">Fase Eliminatória</h2>
+          {knockoutByPhase.map(({ phase, games }) => (
+            <KnockoutPhaseTable key={phase} phase={phase} games={games} />
+          ))}
+        </>
+      )}
     </div>
   )
 }
@@ -165,6 +189,49 @@ function LastGamesDots({
           }`}
         />
       ))}
+    </div>
+  )
+}
+
+function KnockoutPhaseTable({ phase, games }: { phase: MatchPhase; games: Match[] }) {
+  return (
+    <div className="bg-white rounded-2xl border border-light-gray overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 bg-dark">
+        <h2 className="text-sm font-bold text-white">{PHASE_LABELS[phase] ?? phase}</h2>
+        <Link href="/jogos" className="text-xs text-primary font-semibold hover:underline">
+          Ver jogos →
+        </Link>
+      </div>
+      <div className="divide-y divide-light-gray">
+        {games.map((m) => (
+          <div key={m.id} className="flex items-center gap-3 px-4 py-3">
+            {/* Time 1 */}
+            <div className="flex-1 flex items-center gap-2 justify-end">
+              <span className="text-sm font-semibold text-dark text-right">{m.country1.name}</span>
+              <CountryFlag flag={m.country1.flag} name={m.country1.name} size="sm" />
+            </div>
+
+            {/* Placar */}
+            <div className="flex items-center gap-1 min-w-[64px] justify-center">
+              {m.status === 'FINISHED' && m.scoreCountry1 != null && m.scoreCountry2 != null ? (
+                <>
+                  <span className="w-7 h-7 flex items-center justify-center rounded-md bg-dark text-white text-sm font-bold">{m.scoreCountry1}</span>
+                  <span className="text-mid-gray text-xs font-bold">×</span>
+                  <span className="w-7 h-7 flex items-center justify-center rounded-md bg-dark text-white text-sm font-bold">{m.scoreCountry2}</span>
+                </>
+              ) : (
+                <span className="text-xs text-mid-gray font-semibold">{m.matchTime ? `${m.matchTime}` : 'vs'}</span>
+              )}
+            </div>
+
+            {/* Time 2 */}
+            <div className="flex-1 flex items-center gap-2">
+              <CountryFlag flag={m.country2.flag} name={m.country2.name} size="sm" />
+              <span className="text-sm font-semibold text-dark">{m.country2.name}</span>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

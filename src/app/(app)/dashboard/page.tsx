@@ -10,6 +10,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useRanking } from '@/hooks/useRanking'
 import { useTomorrowMatches, useTodayMatches } from '@/hooks/useMatches'
 import { useMyGuesses } from '@/hooks/useGuesses'
+import { calculatePoints } from '@/lib/utils/scoring'
 import type { Match, RankingEntry } from '@/lib/types'
 
 export default function DashboardPage() {
@@ -85,7 +86,10 @@ export default function DashboardPage() {
           <SectionHeader title="Próximos Jogos" href="/jogos" linkLabel="Ver todos →" />
           <div className="space-y-3">
             {upcomingMatches.map((match) => {
-              const guess = guessMap.get(match.id) ?? null
+              const raw = guessMap.get(match.id) ?? null
+              const guess = raw && match.status === 'FINISHED' && match.scoreCountry1 != null && match.scoreCountry2 != null
+                ? { ...raw, points: calculatePoints(raw.result1, raw.result2, match.scoreCountry1, match.scoreCountry2).points }
+                : raw
               return (
                 <div key={match.id}>
                   {guessingMatch?.id === match.id ? (

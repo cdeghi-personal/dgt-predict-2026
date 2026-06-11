@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/Badge'
 import { useMatches } from '@/hooks/useMatches'
 import { useMyGuesses } from '@/hooks/useGuesses'
 import { PHASE_LABELS, formatMatchDate } from '@/lib/utils/dates'
+import { calculatePoints } from '@/lib/utils/scoring'
 import type { Match, MatchPhase } from '@/lib/types'
 
 const PHASES: MatchPhase[] = ['grupos', 'oitavas', 'quartas', 'semifinais', 'finais']
@@ -106,7 +107,10 @@ export default function JogosPage() {
             />
             <div className="space-y-3 mt-2">
               {dayMatches.map((match) => {
-                const guess = guessMap.get(match.id) ?? null
+                const raw = guessMap.get(match.id) ?? null
+                const guess = raw && match.status === 'FINISHED' && match.scoreCountry1 != null && match.scoreCountry2 != null
+                  ? { ...raw, points: calculatePoints(raw.result1, raw.result2, match.scoreCountry1, match.scoreCountry2).points }
+                  : raw
                 return (
                   <div key={match.id}>
                     {guessingMatch?.id === match.id ? (
