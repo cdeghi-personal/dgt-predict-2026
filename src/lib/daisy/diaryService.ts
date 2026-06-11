@@ -95,14 +95,14 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
   const newsResult: NewsResult = await fetchAndSummarizeNews(newsSummaryPrompt, personaPrompt)
   const newsContext = buildNewsContext(newsResult.summary)
 
-  // Posts anteriores — até 3, para manter narrativa conectada
+  // Posts anteriores — até 3, disponibilizados como contexto opcional
   const previousPostsContext = recentDiaries.length > 0
-    ? '\n\nSeus posts anteriores (do mais recente ao mais antigo):\n' +
+    ? '\n\nSeus posts anteriores (contexto opcional — do mais recente ao mais antigo):\n' +
       recentDiaries.map((d, i) => {
         const excerpt = d.content.replace(/[#*`>\-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 300)
         return `--- Post ${i + 1} (${d.createdAt.slice(0, 10)}) ---\nTítulo: ${d.title}\nSubtítulo: ${d.subtitle}\nExcerto: ${excerpt}…`
       }).join('\n\n') +
-      '\n\nUse esses posts como referência de continuidade narrativa quando fizer sentido — mas não force a conexão.'
+      '\n\nEsses posts são apenas referência de contexto. Conecte com o post anterior somente se houver uma continuidade natural que enriqueça a narrativa — caso contrário, ignore-os completamente e escreva como uma edição independente.'
     : ''
 
   // Instrução explícita para Markdown e sem citação de fontes
