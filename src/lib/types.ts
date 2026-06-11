@@ -134,8 +134,8 @@ export interface SydleGuess {
   game: SydleRef
   result1: number
   result2: number
-  _creationDate?: number
-  _lastUpdateDate?: number
+  _creationDate?: number | string
+  _lastUpdateDate?: number | string
 }
 
 export interface Guess {

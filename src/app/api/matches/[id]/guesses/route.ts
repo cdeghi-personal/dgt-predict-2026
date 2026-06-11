@@ -114,6 +114,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       }
 
       const ts = g._creationDate
+      const createdDate = ts ? new Date(typeof ts === 'number' ? ts : ts) : null
       return {
         guessId:   g._id,
         userId,
@@ -123,8 +124,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         result2:   g.result2 ?? 0,
         points,
         outcome,
-        createdAt: ts
-          ? new Date(typeof ts === 'number' ? ts : Number(ts)).toISOString()
+        createdAt: createdDate && !isNaN(createdDate.getTime())
+          ? createdDate.toISOString()
           : new Date().toISOString(),
       }
     })
@@ -154,8 +155,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     return NextResponse.json(response)
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    console.error('[matches/[id]/guesses]', msg)
-    return NextResponse.json({ error: `Erro ao buscar palpites: ${msg}` }, { status: 500 })
+    console.error('[matches/[id]/guesses]', err)
+    return NextResponse.json({ error: 'Erro ao buscar palpites.' }, { status: 500 })
   }
 }
