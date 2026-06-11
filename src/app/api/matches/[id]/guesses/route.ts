@@ -154,7 +154,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     return NextResponse.json(response)
   } catch (err) {
-    console.error('[matches/[id]/guesses]', err)
-    return NextResponse.json({ error: 'Erro ao buscar palpites.' }, { status: 500 })
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[matches/[id]/guesses]', msg)
+    return NextResponse.json({ error: `Erro ao buscar palpites: ${msg}` }, { status: 500 })
   }
 }
