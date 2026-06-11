@@ -103,6 +103,8 @@ export default function AdminDaisyPage() {
   })
 
   // ── Toggle ativo/inativo ────────────────────────────────────────────────────
+  const [toggleError, setToggleError] = useState<string | null>(null)
+
   const toggle = useMutation({
     mutationFn: async ({ id, active }: { id: string; active: boolean }) => {
       const res = await fetch('/api/admin/daisy', {
@@ -110,11 +112,28 @@ export default function AdminDaisyPage() {
         headers: authHeader(),
         body: JSON.stringify({ id, active }),
       })
-      if (!res.ok) throw new Error('Erro ao atualizar.')
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({})) as { error?: string }
+        throw new Error(d.error ?? `Erro ao atualizar (${res.status}).`)
+      }
+    },
+    onMutate: async ({ id, active }) => {
+      await qc.cancelQueries({ queryKey: ['admin-daisy-diaries'] })
+      const prev = qc.getQueryData<DaisyDiary[]>(['admin-daisy-diaries'])
+      qc.setQueryData<DaisyDiary[]>(['admin-daisy-diaries'], (old) =>
+        old?.map((d) => d.id === id ? { ...d, active } : d) ?? []
+      )
+      return { prev }
     },
     onSuccess: () => {
+      setToggleError(null)
       qc.invalidateQueries({ queryKey: ['admin-daisy-diaries'] })
       qc.invalidateQueries({ queryKey: ['daisy-diaries'] })
+    },
+    onError: (err, _vars, context) => {
+      if (context?.prev) qc.setQueryData(['admin-daisy-diaries'], context.prev)
+      setToggleError(err instanceof Error ? err.message : 'Erro ao alterar status.')
+      setTimeout(() => setToggleError(null), 6000)
     },
   })
 
@@ -222,6 +241,12 @@ export default function AdminDaisyPage() {
       </Card>
 
       {/* ── Lista de entradas ──────────────────────────────────────────────── */}
+      {toggleError && (
+        <div className="rounded-xl px-4 py-3 bg-red-50 border border-red-200 text-xs text-red-700 font-medium">
+          ❌ {toggleError}
+        </div>
+      )}
+
       {diaries && diaries.length > 0 && (
         <section>
           <h2 className="text-xs font-bold text-mid-gray uppercase tracking-wide mb-3">
