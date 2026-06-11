@@ -14,17 +14,21 @@ export function mapCountry(raw: SydleCountry): Country {
   }
 }
 
+const BRT_OFFSET_MS = -3 * 60 * 60 * 1000  // UTC-3 (Brasília, sem horário de verão)
+
 /**
- * Converte o campo date do SYDLE para { date, time }.
+ * Converte o campo date do SYDLE para { date, time } no horário de Brasília (UTC-3).
  * Aceita ISO string ("2026-06-11T19:00Z") ou timestamp numérico (ms).
+ * Ex.: 19:00 UTC → 16:00 BRT
  */
 function parseSydleDate(ts: number | string | null | undefined): { date: string; time: string } {
   if (!ts) return { date: '', time: '00:00' }
   const d = new Date(typeof ts === 'string' ? ts : Number(ts))
   if (isNaN(d.getTime())) return { date: '', time: '00:00' }
+  const brt = new Date(d.getTime() + BRT_OFFSET_MS)
   return {
-    date: d.toISOString().split('T')[0],  // "YYYY-MM-DD"
-    time: d.toISOString().slice(11, 16),  // "HH:MM" UTC
+    date: brt.toISOString().split('T')[0],   // "YYYY-MM-DD" em BRT
+    time: brt.toISOString().slice(11, 16),   // "HH:MM" em BRT
   }
 }
 

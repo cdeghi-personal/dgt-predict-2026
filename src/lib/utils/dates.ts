@@ -1,4 +1,4 @@
-import { format, parseISO, isToday, isTomorrow, isYesterday, isPast } from 'date-fns'
+import { format, parseISO, isToday, isTomorrow, isYesterday } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
 export function formatMatchDate(dateStr: string): string {
@@ -19,14 +19,14 @@ export function formatDateTime(dateStr: string, time: string): string {
 
 /**
  * Retorna true se o prazo de palpite expirou.
- * Fecha exatamente no horário de início do jogo (matchTime = "HH:MM" UTC).
- * Se matchTime não for informado, fecha no início do dia (meia-noite UTC).
+ * matchDate e matchTime são no horário de Brasília (UTC-3).
+ * Fecha exatamente no horário de início do jogo.
  */
 export function isGuessingClosed(matchDate: string, matchTime?: string): boolean {
   if (!matchDate) return true
   const iso = matchTime && matchTime !== '00:00'
-    ? `${matchDate}T${matchTime}:00Z`
-    : `${matchDate}T00:00:00Z`
+    ? `${matchDate}T${matchTime}:00-03:00`
+    : `${matchDate}T00:00:00-03:00`
   return new Date() >= new Date(iso)
 }
 

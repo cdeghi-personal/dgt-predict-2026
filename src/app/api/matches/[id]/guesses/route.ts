@@ -36,14 +36,17 @@ function getToken(req: Request): string | null {
   return req.headers.get('Authorization')?.replace('Bearer ', '') ?? null
 }
 
-/** Extrai "YYYY-MM-DD" e "HH:MM" do campo date do SYDLE (ISO string ou timestamp ms) */
+const BRT_OFFSET_MS = -3 * 60 * 60 * 1000
+
+/** Extrai "YYYY-MM-DD" e "HH:MM" em horário de Brasília (UTC-3) */
 function parseSydleGameDate(date: number | string | undefined): { matchDate: string; matchTime: string } {
   if (!date) return { matchDate: '', matchTime: '00:00' }
   const d = new Date(typeof date === 'string' ? date : Number(date))
   if (isNaN(d.getTime())) return { matchDate: '', matchTime: '00:00' }
+  const brt = new Date(d.getTime() + BRT_OFFSET_MS)
   return {
-    matchDate: d.toISOString().split('T')[0],
-    matchTime: d.toISOString().slice(11, 16),
+    matchDate: brt.toISOString().split('T')[0],
+    matchTime: brt.toISOString().slice(11, 16),
   }
 }
 
