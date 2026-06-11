@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { href: '/classificacao', label: 'Tabela', icon: TableIcon },
   { href: '/meus-palpites', label: 'Palpites', icon: PencilIcon },
   { href: '/ranking', label: 'Ranking', icon: ChartIcon },
+  { href: '/daisy', label: 'Daisy', icon: DaisyIcon },
   { href: '/perfil', label: 'Perfil', icon: UserIcon },
 ]
 
@@ -96,6 +97,16 @@ function SettingsIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  )
+}
+function DaisyIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path d="M12 2a2 2 0 012 2v1a2 2 0 01-4 0V4a2 2 0 012-2zM12 19a2 2 0 012 2v1H10v-1a2 2 0 012-2zM4 12a2 2 0 012-2h1a2 2 0 010 4H6a2 2 0 01-2-2zM17 12a2 2 0 012-2h1a2 2 0 010 4h-1a2 2 0 01-2-2z" />
+      <path d="M6.34 6.34a2 2 0 012.83 0l.7.7a2 2 0 01-2.83 2.83l-.7-.7a2 2 0 010-2.83zM14.13 14.13a2 2 0 012.83 0l.7.7a2 2 0 01-2.83 2.83l-.7-.7a2 2 0 010-2.83z" />
+      <path d="M6.34 17.66a2 2 0 010-2.83l.7-.7a2 2 0 012.83 2.83l-.7.7a2 2 0 01-2.83 0zM14.13 9.87a2 2 0 010-2.83l.7-.7a2 2 0 012.83 2.83l-.7.7a2 2 0 01-2.83 0z" />
       <circle cx="12" cy="12" r="3" />
     </svg>
   )

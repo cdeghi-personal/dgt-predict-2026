@@ -7,11 +7,16 @@ export const SYDLE_BASE_URL = `https://${SYDLE_ORG}.sydle.one/api/1/${SYDLE_APP}
 
 // Identificadores das classes (identifier no SYDLE)
 export const SYDLE_CLASS = {
-  countries: 'paises',   // Países
-  games: 'game',         // Jogos (metadados da partida)
-  results: 'results',    // Resultados (placar real — criado ao finalizar)
-  guesses: 'guesses',    // Palpites
+  countries: 'paises',       // Países
+  games: 'game',             // Jogos (metadados da partida)
+  results: 'results',        // Resultados (placar real — criado ao finalizar)
+  guesses: 'guesses',        // Palpites
+  daisyPrompt: 'daisyPrompt', // Prompts da Daisy IA
+  daisyDiary: 'daisyDiary',  // Diário da Daisy
 } as const
+
+// Pacote das classes Daisy (pode ser diferente de SYDLE_PACKAGE)
+export const DAISY_PACKAGE = process.env.DAISY_PACKAGE ?? SYDLE_PACKAGE
 
 // Métodos SYDLE disponíveis
 export const SYDLE_METHOD = {

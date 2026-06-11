@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/Button'
 import { RankingTable } from '@/components/features/RankingTable'
 import { MatchCard } from '@/components/features/MatchCard'
@@ -11,7 +12,24 @@ import { useRanking } from '@/hooks/useRanking'
 import { useTomorrowMatches, useTodayMatches } from '@/hooks/useMatches'
 import { useMyGuesses } from '@/hooks/useGuesses'
 import { calculatePoints } from '@/lib/utils/scoring'
-import type { Match, RankingEntry } from '@/lib/types'
+import { format, parseISO } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
+import type { Match, RankingEntry, DaisyDiary } from '@/lib/types'
+
+function useLatestDiary() {
+  const { authHeader, isAuthenticated } = useAuth()
+  return useQuery<DaisyDiary[], Error, DaisyDiary | null>({
+    queryKey: ['daisy-diaries'],
+    queryFn: async () => {
+      const res = await fetch('/api/daisy/diary', { headers: authHeader() })
+      if (!res.ok) return []
+      return res.json() as Promise<DaisyDiary[]>
+    },
+    enabled: isAuthenticated,
+    staleTime: 120_000,
+    select: (data: DaisyDiary[]) => data[0] ?? null,
+  })
+}
 
 export default function DashboardPage() {
   const { user } = useAuth()
@@ -19,6 +37,7 @@ export default function DashboardPage() {
   const { data: tomorrowMatches } = useTomorrowMatches()
   const { data: todayMatches } = useTodayMatches()
   const { data: myGuesses } = useMyGuesses()
+  const { data: latestDiary } = useLatestDiary()
   const [guessingMatch, setGuessingMatch] = useState<Match | null>(null)
 
   const myRankEntry = ranking?.find((r) => r.userId === user?.id)
@@ -31,7 +50,6 @@ export default function DashboardPage() {
 
       {/* ── Hero ───────────────────────────────────────────────────────── */}
       <div className="relative rounded-2xl overflow-hidden bg-dark text-white p-6">
-        {/* faixa dourada decorativa */}
         <div className="absolute top-0 right-0 w-48 h-full bg-gradient-to-l from-primary/20 to-transparent pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-secondary to-primary" />
 
@@ -52,7 +70,6 @@ export default function DashboardPage() {
           <span className="text-5xl select-none">⚽</span>
         </div>
 
-        {/* Stats rápidos */}
         {myRankEntry && (
           <div className="grid grid-cols-3 gap-3 mt-5">
             <HeroStat label="Pontos" value={String(myRankEntry.totalPoints)} accent />
@@ -104,6 +121,14 @@ export default function DashboardPage() {
         </section>
       )}
 
+      {/* ── Diário da Daisy ────────────────────────────────────────────── */}
+      {latestDiary && (
+        <section>
+          <SectionHeader title="📓 Diário da Daisy" href="/daisy" linkLabel="Ver todos →" />
+          <DaisyCard diary={latestDiary} />
+        </section>
+      )}
+
       {/* ── Ranking ────────────────────────────────────────────────────── */}
       <section>
         <SectionHeader title="🏆 Top 10 Ranking" href="/ranking" linkLabel="Ver completo →" />
@@ -135,6 +160,34 @@ export default function DashboardPage() {
 }
 
 // ─── Sub-componentes ──────────────────────────────────────────────────────────
+
+function DaisyCard({ diary }: { diary: DaisyDiary }) {
+  const dateLabel = (() => {
+    try { return format(parseISO(diary.createdAt), "d 'de' MMMM", { locale: ptBR }) }
+    catch { return '' }
+  })()
+
+  return (
+    <Link href={`/daisy/${diary.id}`}>
+      <div className="bg-white rounded-2xl border border-light-gray hover:shadow-md transition-shadow p-4 flex items-start gap-3">
+        <div className="w-10 h-10 rounded-full bg-violet-600 flex items-center justify-center text-lg shrink-0">
+          🤖
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <span className="text-xs font-bold text-violet-700">Daisy IA</span>
+            {dateLabel && <span className="text-xs text-mid-gray">{dateLabel}</span>}
+          </div>
+          <p className="text-sm font-bold text-dark leading-snug line-clamp-1">{diary.title}</p>
+          {diary.subtitle && (
+            <p className="text-xs text-mid-gray mt-0.5 line-clamp-2">{diary.subtitle}</p>
+          )}
+        </div>
+        <span className="text-primary text-xs font-semibold shrink-0">→</span>
+      </div>
+    </Link>
+  )
+}
 
 function HeroStat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (

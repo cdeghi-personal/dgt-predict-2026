@@ -181,3 +181,42 @@ export interface AuditEntry {
   changedBy: string
   changedAt: number
 }
+
+// ─── Daisy — Prompts (classe daisyPrompt) ────────────────────────────────────
+// Atenção: campos com inicial maiúscula (Prompt, Active, Version) — typo SYDLE
+
+export interface SydleDaisyPrompt {
+  _id: string
+  identifier: string
+  Prompt: string
+  Active: boolean
+  Version: string
+  temperature?: number | null
+  model?: string | null
+  description?: string
+  _creationDate?: number | string
+  _lastUpdateDate?: number | string
+}
+
+// ─── Daisy — Diário (classe daisyDiary) ──────────────────────────────────────
+// Atenção: "tytle" e "subtytle" — typos SYDLE intencionais
+
+export interface SydleDaisyDiary {
+  _id: string
+  tytle: string
+  subtytle: string
+  content: string
+  Active: boolean
+  _creationDate?: number | string
+  _lastUpdateDate?: number | string
+}
+
+export interface DaisyDiary {
+  id: string
+  title: string
+  subtitle: string
+  content: string
+  active: boolean
+  createdAt: string
+  updatedAt?: string
+}

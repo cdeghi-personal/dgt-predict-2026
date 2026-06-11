@@ -5,18 +5,27 @@ import { usePathname } from 'next/navigation'
 import { clsx } from 'clsx'
 import { useAuth } from '@/contexts/AuthContext'
 
+const DaisyIcon = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <circle cx="12" cy="12" r="3" />
+    <path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12" />
+  </svg>
+)
+
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: GridIcon },
   { href: '/jogos', label: 'Jogos', icon: TrophyIcon },
   { href: '/classificacao', label: 'Classificação', icon: TableIcon },
   { href: '/meus-palpites', label: 'Meus Palpites', icon: PencilIcon },
   { href: '/ranking', label: 'Ranking', icon: ChartIcon },
+  { href: '/daisy', label: 'Diário da Daisy', icon: DaisyIcon },
   { href: '/regras', label: 'Regras', icon: BookIcon },
   { href: '/perfil', label: 'Perfil', icon: UserIcon },
 ]
 
 const ADMIN_NAV_ITEMS = [
-  { href: '/admin/resultados', label: 'Administração', icon: SettingsIcon },
+  { href: '/admin/resultados', label: 'Resultados', icon: SettingsIcon },
+  { href: '/admin/daisy', label: 'Daisy IA', icon: DaisyIcon },
 ]
 
 export function Sidebar() {

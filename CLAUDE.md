@@ -171,41 +171,59 @@ src/
     login/page.tsx                      # Tela de login (fundo dark, logo DGT)
     (app)/
       layout.tsx                        # Shell com BottomNav
-      dashboard/page.tsx                # Hero + próximos jogos + ranking
+      dashboard/page.tsx                # Hero + próximos jogos + card Daisy + ranking
       jogos/page.tsx                    # Lista de jogos com filtro de fase
       meus-palpites/page.tsx            # Histórico de palpites do usuário
       classificacao/page.tsx            # Grupos + fase eliminatória
-      ranking/page.tsx                  # Ranking completo
+      ranking/page.tsx                  # Ranking completo (Daisy em roxo)
       perfil/page.tsx                   # Perfil do usuário
       regras/page.tsx                   # Regras do bolão
+      daisy/
+        page.tsx                        # Lista de entradas do Diário da Daisy
+        [id]/page.tsx                   # Leitura de uma entrada do diário
       admin/
         resultados/page.tsx             # Admin: lançar resultados
         auditoria/page.tsx              # Admin: histórico de alterações
+        daisy/page.tsx                  # Admin: gerar e gerenciar diário da Daisy
+  api/
+    daisy/
+      diary/route.ts                    # GET → lista entradas ativas (autenticado)
+      diary/[id]/route.ts               # GET → entrada por ID
+    admin/
+      daisy/route.ts                    # GET (todos) / POST (gerar) / PATCH (toggle ativo) — admin
   components/
     features/
       MatchCard.tsx                     # Card de jogo (com/sem palpite)
       GuessForm.tsx                     # Formulário de palpite
       CountryFlag.tsx                   # Bandeira do país
-      RankingTable.tsx                  # Tabela de ranking
+      RankingTable.tsx                  # Tabela de ranking (Daisy destacada em roxo)
     layout/
       AppLayout.tsx
-      BottomNav.tsx                     # Navegação inferior mobile
-      Sidebar.tsx                       # Sidebar desktop
+      BottomNav.tsx                     # Navegação inferior mobile (inclui /daisy)
+      Sidebar.tsx                       # Sidebar desktop (inclui /daisy e /admin/daisy)
     ui/                                 # Primitivos: Button, Card, Badge, Input...
   hooks/
     useMatches.ts                       # useMatches, useTodayMatches, useTomorrowMatches
     useGuesses.ts                       # useMyGuesses
     useRanking.ts
   lib/
-    types.ts                            # Todos os tipos TypeScript
+    types.ts                            # Todos os tipos TypeScript (inclui DaisyDiary, SydleDaisyPrompt)
     mappers.ts                          # SydleGame → Match, SydleGuess → Guess
     standings.ts                        # calculateGroupStandings()
     sydle/
       client.ts                         # sydleSignIn, sydleCall, parseSearch
-      constants.ts                      # SYDLE_BASE_URL, SYDLE_CLASS, SYDLE_METHOD
+      constants.ts                      # SYDLE_BASE_URL, SYDLE_CLASS (+daisyPrompt/daisyDiary), DAISY_PACKAGE
     utils/
       dates.ts                          # formatMatchDate, PHASE_LABELS, isGuessingClosed
       scoring.ts                        # calculatePoints, OUTCOME_COLORS
+    daisy/
+      constants.ts                      # DAISY_USER_ID, DAISY_USER_NAME, DAISY_PROMPT_IDENTIFIERS
+      aiClient.ts                       # callClaude() via Anthropic API (server-side only)
+      promptRepository.ts               # getAllPrompts, getPromptByIdentifier — SYDLE daisyPrompt
+      diaryRepository.ts                # getActiveDiaries, createDiary, toggleDiaryActive — SYDLE daisyDiary
+      guessService.ts                   # saveDaisyGuesses — cria palpites no SYDLE como usuário Daisy
+      newsService.ts                    # summarizeNewsUrls, buildNewsContext
+      diaryService.ts                   # generateDailyDiary — orquestra geração completa
   contexts/
     AuthContext.tsx                     # useAuth, login/logout
 ```
@@ -214,15 +232,18 @@ src/
 
 ```
 /login                     → LoginPage (fundo dark)
-/dashboard                 → DashboardPage
+/dashboard                 → DashboardPage (inclui card do Diário da Daisy)
 /jogos                     → JogosPage (filtro por fase)
 /meus-palpites             → MeusPalpitesPage
 /classificacao             → ClassificacaoPage
-/ranking                   → RankingPage
+/ranking                   → RankingPage (Daisy destacada em roxo)
+/daisy                     → DaisyPage — lista de entradas do diário
+/daisy/[id]                → DaisyEntryPage — leitura completa de uma entrada
 /perfil                    → PerfilPage
 /regras                    → RegrasPage
 /admin/resultados          → Admin: lançar resultados
 /admin/auditoria           → Admin: histórico
+/admin/daisy               → Admin: gerar diário + gerenciar entradas
 ```
 
 ## Regras de prazo de palpite
@@ -242,11 +263,102 @@ PHASE_LABELS = {
 }
 ```
 
+## Diário da Daisy — Visão Geral
+
+Funcionalidade de IA que gera entradas diárias de diário com análises da Copa, palpites automáticos e ranking, usando a API Anthropic (Claude).
+
+### Variáveis de ambiente adicionais
+
+```env
+ANTHROPIC_API_KEY=sk-ant-...       # Chave da API Anthropic (obrigatória para geração)
+DAISY_PACKAGE=predict2026          # Pacote SYDLE das classes Daisy (padrão: predict2026)
+```
+
+### Classes SYDLE — Daisy
+
+| Pacote | Classe | Descrição |
+|---|---|---|
+| `predict2026` (ou `DAISY_PACKAGE`) | `daisyPrompt` | Prompts de IA armazenados no SYDLE |
+| `predict2026` (ou `DAISY_PACKAGE`) | `daisyDiary` | Entradas do diário geradas |
+
+#### Campos `daisyPrompt` (atenção: capitalizações SYDLE)
+- `identifier` — chave do prompt (ex: `DAISY_SYSTEM_PERSONA`)
+- `Prompt` — texto do prompt (P maiúsculo)
+- `Active` — ativo/inativo (A maiúsculo)
+- `Version` — versão (V maiúsculo)
+- `temperature`, `model` — parâmetros opcionais
+
+#### Campos `daisyDiary` (atenção: typos SYDLE intencionais)
+- `tytle` — título (typo: não é "title")
+- `subtytle` — subtítulo (typo: não é "subtitle")
+- `content` — conteúdo da entrada
+- `Active` — ativo/inativo (A maiúsculo)
+
+### Identificadores de prompts SYDLE
+
+```ts
+DAISY_PROMPT_IDENTIFIERS = {
+  persona:     'DAISY_SYSTEM_PERSONA',   // Personalidade da Daisy
+  diary:       'DAISY_DAILY_DIARY',      // Prompt de geração do diário
+  guesses:     'DAISY_DAILY_GUESSES',    // Prompt de geração de palpites
+  newsSummary: 'DAISY_NEWS_SUMMARY',     // Prompt de resumo de notícias
+}
+```
+
+### Usuário Daisy no sistema
+
+```ts
+DAISY_USER_ID   = '6a2a86ee9238442e1de757ac'
+DAISY_USER_NAME = 'Daisy IA'
+```
+
+Os palpites da Daisy são salvos na classe `predict2026.guesses` com `user._id = DAISY_USER_ID`, igual a qualquer outro usuário. No ranking, a linha da Daisy é destacada em roxo (`bg-violet-50`, avatar 🤖).
+
+### Fluxo de geração (admin)
+
+1. Admin acessa `/admin/daisy` e opcionalmente cola notícias do dia
+2. POST para `/api/admin/daisy` chama `generateDailyDiary()`
+3. `diaryService` carrega prompts do SYDLE, jogos recentes, ranking e jogos futuros
+4. Claude gera JSON `{ title, subtitle, content }` para o diário
+5. Claude gera array `[{ gameId, result1, result2 }]` para palpites das próximas 24h
+6. Diário salvo em `daisyDiary` via `_create`; palpites salvos em `predict2026.guesses`
+7. Admin pode desativar entradas via toggle (PATCH `/api/admin/daisy`)
+
+### aiClient — uso correto
+
+```ts
+// SOMENTE server-side (API routes, server components, lib/daisy/)
+import { callClaude, parseJsonFromText } from '@/lib/daisy/aiClient'
+
+const raw = await callClaude(systemPrompt, userMessage, { maxTokens: 2048, temperature: 0.8 })
+const data = parseJsonFromText<{ title: string }>(raw)
+```
+
+`parseJsonFromText` extrai o primeiro bloco JSON do texto (suporta markdown code fences).
+
+### Segurança
+
+- `ANTHROPIC_API_KEY` nunca exposta ao client — toda chamada à IA é server-side
+- Rotas `/api/admin/daisy` validam `user.isAdmin` via `X-User-Login` header
+- Conteúdo gerado é sanitizado (strip HTML/scripts) antes de salvar
+- Página `/admin/daisy` redireciona para `/dashboard` se `!user.isAdmin`
+
+### RankingTable — exibição da Daisy
+
+```tsx
+const isDaisy = entry.userId === DAISY_USER_ID
+// Linha: bg-violet-50 | avatar: 🤖 bg-violet-600 | nome: text-violet-700
+```
+
+### Dashboard — card da Daisy
+
+O componente `DaisyCard` no dashboard mostra a entrada mais recente do diário (via `useLatestDiary`). Só aparece quando houver pelo menos uma entrada ativa.
+
 ## Como rodar localmente
 
 ```bash
 npm install
-# Criar .env.local com as variáveis acima
+# Criar .env.local com as variáveis acima (incluindo ANTHROPIC_API_KEY)
 npm run dev
 ```
 
@@ -256,3 +368,4 @@ npm run dev
 - Branch `main` → deploy automático
 - Variáveis de ambiente configuradas no dashboard do Vercel
 - Org de produção: `dgt-consultoria`
+- **Adicionar ao Vercel**: `ANTHROPIC_API_KEY` e `DAISY_PACKAGE` (se necessário)
