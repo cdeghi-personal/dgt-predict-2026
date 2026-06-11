@@ -137,6 +137,17 @@ export default function AdminDaisyPage() {
         throw new Error(d.error ?? `Erro ao excluir (${res.status}).`)
       }
     },
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: ['admin-daisy-diaries'] })
+      const prev = qc.getQueryData<DaisyDiary[]>(['admin-daisy-diaries'])
+      qc.setQueryData<DaisyDiary[]>(['admin-daisy-diaries'], (old) =>
+        old?.filter((d) => d.id !== id) ?? []
+      )
+      return { prev }
+    },
+    onError: (_err, _id, context) => {
+      if (context?.prev) qc.setQueryData(['admin-daisy-diaries'], context.prev)
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-daisy-diaries'] })
       qc.invalidateQueries({ queryKey: ['daisy-diaries'] })
