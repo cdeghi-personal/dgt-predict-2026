@@ -39,6 +39,13 @@ export interface GenerateDiaryResult {
   generatedAt: string
 }
 
+export interface MatchAnalysis {
+  gameId: string
+  country1: string
+  country2: string
+  analysis: string
+}
+
 export interface DaisyGuessResult {
   gameId: string
   country1: string
@@ -46,10 +53,12 @@ export interface DaisyGuessResult {
   result1: number
   result2: number
   reasoning: string
+  analysis?: string  // síntese de DAISY_MATCH_ANALYSIS
 }
 
 export interface GenerateGuessesResult {
   guesses: DaisyGuessResult[]
+  analyses: MatchAnalysis[]
   newsAnalyzed: number
   gamesFound: number
   executionMs: number

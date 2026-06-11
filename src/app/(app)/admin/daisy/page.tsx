@@ -303,13 +303,20 @@ export default function AdminDaisyPage() {
                 {guessesResult.guesses.length > 0 && (
                   <div className="space-y-2">
                     {guessesResult.guesses.map((g) => (
-                      <div key={g.gameId} className="bg-white rounded-lg border border-green-200 p-2.5">
-                        <div className="flex items-center justify-between mb-1">
+                      <div key={g.gameId} className="bg-white rounded-lg border border-green-200 p-2.5 space-y-1.5">
+                        <div className="flex items-center justify-between">
                           <span className="text-xs font-bold text-dark">{g.country1} vs {g.country2}</span>
                           <span className="text-sm font-bold text-primary">{g.result1} × {g.result2}</span>
                         </div>
+                        {g.analysis && (
+                          <p className="text-[11px] text-dark leading-snug border-t border-green-100 pt-1.5">
+                            💡 {g.analysis}
+                          </p>
+                        )}
                         {g.reasoning && (
-                          <p className="text-[11px] text-mid-gray italic leading-snug">{g.reasoning}</p>
+                          <p className="text-[11px] text-mid-gray italic leading-snug">
+                            🎯 {g.reasoning}
+                          </p>
                         )}
                       </div>
                     ))}
