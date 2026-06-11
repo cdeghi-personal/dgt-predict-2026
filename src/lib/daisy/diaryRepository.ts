@@ -91,14 +91,28 @@ export async function toggleDiaryActive(
   active: boolean,
   token: string,
 ): Promise<void> {
-  // SYDLE _patch usa JSON Patch: { _id, _operationsList: [{ op, path, value }] }
+  // Busca o objeto atual para montar o _update completo
+  const raw = await sydleCall(
+    DAISY_PACKAGE,
+    SYDLE_CLASS.daisyDiary,
+    SYDLE_METHOD.search,
+    { query: { term: { _id: id } }, size: 1 },
+    token,
+  )
+  const current = parseSearch<SydleDaisyDiary>(raw)[0]
+  if (!current) throw new Error(`Diary ${id} not found`)
+
   await sydleCall(
     DAISY_PACKAGE,
     SYDLE_CLASS.daisyDiary,
-    SYDLE_METHOD.patch,
+    SYDLE_METHOD.update,
     {
       _id: id,
-      _operationsList: [{ op: 'replace', path: '/active', value: active }],
+      tytle:    current.tytle,
+      subtytle: current.subtytle,
+      content:  current.content,
+      active,
+      ...(current.date ? { date: current.date } : {}),
     },
     token,
   )
