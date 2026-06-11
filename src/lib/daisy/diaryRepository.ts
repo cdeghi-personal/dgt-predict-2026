@@ -101,6 +101,16 @@ export async function createDiary(
   return mapDiary(raw)
 }
 
+export async function deleteDiary(id: string, token: string): Promise<void> {
+  await sydleCall(
+    DAISY_PACKAGE,
+    SYDLE_CLASS.daisyDiary,
+    SYDLE_METHOD.delete,
+    { _id: id },
+    token,
+  )
+}
+
 export async function toggleDiaryActive(
   id: string,
   active: boolean,

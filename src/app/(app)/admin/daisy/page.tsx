@@ -124,6 +124,25 @@ export default function AdminDaisyPage() {
     onError: (err) => setGuessesError(err instanceof Error ? err.message : 'Erro ao gerar palpites.'),
   })
 
+  // ── Exclusão de entrada inativa ────────────────────────────────────────────
+  const deleteDiary = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch('/api/admin/daisy', {
+        method: 'DELETE',
+        headers: authHeader(),
+        body: JSON.stringify({ id }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({})) as { error?: string }
+        throw new Error(d.error ?? `Erro ao excluir (${res.status}).`)
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-daisy-diaries'] })
+      qc.invalidateQueries({ queryKey: ['daisy-diaries'] })
+    },
+  })
+
   // ── Toggle ativo/inativo ────────────────────────────────────────────────────
   const [toggleError, setToggleError] = useState<string | null>(null)
 
@@ -347,6 +366,8 @@ export default function AdminDaisyPage() {
                 diary={diary}
                 onToggle={(active) => toggle.mutate({ id: diary.id, active })}
                 toggling={toggle.isPending}
+                onDelete={(id) => deleteDiary.mutate(id)}
+                deleting={deleteDiary.isPending}
               />
             ))}
           </div>
@@ -379,12 +400,17 @@ function DiaryAdminCard({
   diary,
   onToggle,
   toggling,
+  onDelete,
+  deleting,
 }: {
   diary: DaisyDiary
   onToggle: (active: boolean) => void
   toggling: boolean
+  onDelete: (id: string) => void
+  deleting: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   return (
     <Card className="p-4">
@@ -416,8 +442,40 @@ function DiaryAdminCard({
           >
             {diary.active ? 'Desativar' : 'Ativar'}
           </button>
+          {/* Excluir — só para entradas inativas */}
+          {!diary.active && (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              disabled={deleting}
+              className="text-xs text-red-400 underline hover:text-red-600 disabled:opacity-50"
+            >
+              Excluir
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Confirmação de exclusão */}
+      {confirmDelete && (
+        <div className="mt-3 pt-3 border-t border-red-100 bg-red-50 rounded-xl px-3 py-2.5 flex items-center justify-between gap-3">
+          <p className="text-xs text-red-700 font-medium">Excluir permanentemente esta entrada?</p>
+          <div className="flex gap-2 shrink-0">
+            <button
+              onClick={() => setConfirmDelete(false)}
+              className="text-xs text-mid-gray underline hover:text-dark"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={() => { onDelete(diary.id); setConfirmDelete(false) }}
+              disabled={deleting}
+              className="text-xs font-bold text-white bg-red-500 hover:bg-red-600 px-3 py-1 rounded-lg disabled:opacity-50 transition-colors"
+            >
+              {deleting ? 'Excluindo…' : 'Sim, excluir'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {expanded && (
         <div className="mt-3 pt-3 border-t border-light-gray">

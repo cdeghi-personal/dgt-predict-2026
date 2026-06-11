@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getAllDiaries, toggleDiaryActive } from '@/lib/daisy/diaryRepository'
+import { getAllDiaries, toggleDiaryActive, deleteDiary } from '@/lib/daisy/diaryRepository'
 
 const ADMIN_LOGINS = (process.env.ADMIN_LOGINS ?? '')
   .split(',')
@@ -30,6 +30,31 @@ export async function GET(req: Request) {
   } catch (err) {
     console.error('[admin/daisy GET]', err)
     return NextResponse.json({ error: 'Erro ao buscar diários.' }, { status: 500 })
+  }
+}
+
+// DELETE /api/admin/daisy — exclui entrada INATIVA
+// Body: { id: string }
+export async function DELETE(req: Request) {
+  const token = getToken(req)
+  if (!token) return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 })
+  if (!isAdmin(getLogin(req))) return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 })
+
+  try {
+    const { id } = await req.json() as { id: string }
+    if (!id) return NextResponse.json({ error: 'ID obrigatório.' }, { status: 400 })
+
+    // Busca o diário para confirmar que está inativo antes de excluir
+    const diaries = await getAllDiaries(token)
+    const diary = diaries.find((d) => d.id === id)
+    if (!diary) return NextResponse.json({ error: 'Entrada não encontrada.' }, { status: 404 })
+    if (diary.active) return NextResponse.json({ error: 'Não é possível excluir uma entrada ativa.' }, { status: 422 })
+
+    await deleteDiary(id, token)
+    return NextResponse.json({ ok: true })
+  } catch (err) {
+    console.error('[admin/daisy DELETE]', err)
+    return NextResponse.json({ error: 'Erro ao excluir entrada.' }, { status: 500 })
   }
 }
 
