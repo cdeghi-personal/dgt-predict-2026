@@ -100,7 +100,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       const isDaisy = userId === DAISY_USER_ID
       const userName = isDaisy
         ? 'Daisy'
-        : (g.user?.name ?? g.user?.login ?? 'Usuário')
+        : (g.userName ?? g.user?.name ?? g.user?.login ?? 'Usuário')
 
       let points: number | null = null
       let outcome: GuessOutcome = 'PENDING'

@@ -134,6 +134,7 @@ export interface SydleGuess {
   game: SydleRef
   result1: number
   result2: number
+  userName?: string          // campo desnormalizado calculado pelo SYDLE no _save
   _creationDate?: number | string
   _lastUpdateDate?: number | string
 }

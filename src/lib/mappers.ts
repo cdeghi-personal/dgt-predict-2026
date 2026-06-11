@@ -78,7 +78,7 @@ export function mapGuess(raw: SydleGuess): Guess {
   return {
     id: raw._id,
     userId: raw.user?._id ?? '',
-    userName: raw.user?.name ?? raw.user?.login ?? '',
+    userName: raw.userName ?? raw.user?.name ?? raw.user?.login ?? '',
     matchId: raw.game?._id ?? '',   // game._id é o ID da partida
     result1: raw.result1 ?? 0,
     result2: raw.result2 ?? 0,
