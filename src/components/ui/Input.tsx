@@ -33,8 +33,8 @@ export function Input({ label, error, className, id, ...props }: InputProps) {
 }
 
 interface ScoreInputProps {
-  value: number
-  onChange: (v: number) => void
+  value: number | null
+  onChange: (v: number | null) => void
   disabled?: boolean
 }
 
@@ -44,15 +44,24 @@ export function ScoreInput({ value, onChange, disabled }: ScoreInputProps) {
       type="number"
       min={0}
       max={20}
-      value={value}
-      onChange={(e) => onChange(Math.max(0, parseInt(e.target.value) || 0))}
+      value={value ?? ''}
+      placeholder="–"
+      onChange={(e) => {
+        const raw = e.target.value
+        if (raw === '') { onChange(null); return }
+        const n = parseInt(raw, 10)
+        if (!isNaN(n)) onChange(Math.max(0, Math.min(20, n)))
+      }}
       disabled={disabled}
       className={clsx(
         'w-12 h-12 text-center text-xl font-bold rounded-xl border-2',
         'focus:outline-none focus:ring-2 focus:ring-primary',
+        'placeholder:text-light-gray',
         disabled
           ? 'bg-gray-50 border-light-gray text-mid-gray cursor-not-allowed'
-          : 'bg-white border-light-gray text-dark',
+          : value === null
+            ? 'bg-white border-primary/50 text-dark'
+            : 'bg-white border-light-gray text-dark',
       )}
     />
   )

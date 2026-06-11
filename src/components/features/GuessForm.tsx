@@ -16,8 +16,8 @@ interface GuessFormProps {
 }
 
 export function GuessForm({ match, existingGuess, onClose }: GuessFormProps) {
-  const [score1, setScore1] = useState(existingGuess?.result1 ?? 0)
-  const [score2, setScore2] = useState(existingGuess?.result2 ?? 0)
+  const [score1, setScore1] = useState<number | null>(existingGuess?.result1 ?? null)
+  const [score2, setScore2] = useState<number | null>(existingGuess?.result2 ?? null)
   const [error, setError] = useState<string | null>(null)
 
   const create = useCreateGuess()
@@ -28,15 +28,15 @@ export function GuessForm({ match, existingGuess, onClose }: GuessFormProps) {
 
   async function handleSubmit() {
     setError(null)
+    if (score1 === null || score2 === null) {
+      setError('Preencha o placar dos dois times antes de confirmar.')
+      return
+    }
     try {
       if (existingGuess) {
         await update.mutateAsync({ id: existingGuess.id, result1: score1, result2: score2 })
       } else {
-        await create.mutateAsync({
-          matchId: match.id,
-          result1: score1,
-          result2: score2,
-        })
+        await create.mutateAsync({ matchId: match.id, result1: score1, result2: score2 })
       }
       onClose?.()
     } catch (err) {
