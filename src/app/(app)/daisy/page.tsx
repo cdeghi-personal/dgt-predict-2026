@@ -30,6 +30,14 @@ function formatDate(iso: string) {
   }
 }
 
+function formatDateTime(iso: string) {
+  try {
+    return format(parseISO(iso), "d 'de' MMMM 'de' yyyy '·' HH:mm", { locale: ptBR })
+  } catch {
+    return iso
+  }
+}
+
 export default function DaisyPage() {
   const { data: diaries, isLoading } = useDaisyDiaries()
 
@@ -79,6 +87,7 @@ export default function DaisyPage() {
 
 function DiaryCard({ diary, featured }: { diary: DaisyDiary; featured?: boolean }) {
   const dateLabel = diary.date ? formatDate(diary.date) : formatDate(diary.createdAt)
+  const generatedAt = formatDateTime(diary.createdAt)
 
   return (
     <Link href={`/daisy/${diary.id}`}>
@@ -102,8 +111,8 @@ function DiaryCard({ diary, featured }: { diary: DaisyDiary; featured?: boolean 
         )}
 
         <div className="flex items-center justify-between mt-3 pt-3 border-t border-light-gray">
-          {featured && <span className="text-xs text-mid-gray">{dateLabel}</span>}
-          <span className="text-xs text-primary font-semibold ml-auto">Ler edição →</span>
+          <span className="text-[10px] text-mid-gray/70">Gerado em {generatedAt}</span>
+          <span className="text-xs text-primary font-semibold">Ler edição →</span>
         </div>
       </div>
     </Link>

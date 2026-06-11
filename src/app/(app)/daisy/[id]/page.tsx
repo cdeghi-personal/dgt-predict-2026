@@ -32,6 +32,14 @@ function formatDate(iso: string) {
   }
 }
 
+function formatDateTime(iso: string) {
+  try {
+    return format(parseISO(iso), "d 'de' MMMM 'de' yyyy '·' HH:mm", { locale: ptBR })
+  } catch {
+    return iso
+  }
+}
+
 export default function DaisyEntryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const { data: diary, isLoading, error } = useDiary(id)
@@ -53,6 +61,7 @@ export default function DaisyEntryPage({ params }: { params: Promise<{ id: strin
   const dateLabel = diary.date
     ? formatDate(diary.date)
     : formatDate(diary.createdAt)
+  const generatedAt = formatDateTime(diary.createdAt)
 
   return (
     <div className="max-w-2xl mx-auto space-y-5 pb-10">
@@ -85,6 +94,7 @@ export default function DaisyEntryPage({ params }: { params: Promise<{ id: strin
                 </span>
               </div>
               <p className="text-xs text-white/50">{dateLabel}</p>
+              <p className="text-[10px] text-white/30 mt-0.5">Gerado em {generatedAt}</p>
             </div>
           </div>
 

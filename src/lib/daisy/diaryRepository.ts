@@ -78,7 +78,7 @@ export async function createDiary(
       tytle: title,
       subtytle: subtitle,
       content,
-      active: true,
+      active: false,
       ...(date ? { date } : {}),
     },
     token,
