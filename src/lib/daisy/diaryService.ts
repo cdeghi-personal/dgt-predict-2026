@@ -8,7 +8,7 @@ import { sydleCall, parseSearch } from '@/lib/sydle/client'
 import { SYDLE_PACKAGE, SYDLE_CLASS, SYDLE_METHOD } from '@/lib/sydle/constants'
 import { callOpenAI, parseJsonFromText } from './aiClient'
 import { getAllPrompts } from './promptRepository'
-import { createDiary } from './diaryRepository'
+import { createDiary, getMostRecentDiaries } from './diaryRepository'
 import { saveDaisyGuesses } from './guessService'
 import { fetchAndSummarizeNews, buildNewsContext } from './newsService'
 import { DAISY_PROMPT_IDENTIFIERS } from './constants'
@@ -35,7 +35,7 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
   const today = new Date()
   const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}T00:00:00Z`
 
-  const [prompts, gamesRaw, resultsRaw, guessesRaw, upcomingRaw] = await Promise.all([
+  const [prompts, gamesRaw, resultsRaw, guessesRaw, upcomingRaw, recentDiaries] = await Promise.all([
     getAllPrompts(token),
     sydleCall(SYDLE_PACKAGE, SYDLE_CLASS.games, SYDLE_METHOD.search,
       { query: { match_all: {} }, sort: [{ date: { order: 'desc' } }], size: 15 }, token),
@@ -46,6 +46,7 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
     sydleCall(SYDLE_PACKAGE, SYDLE_CLASS.games, SYDLE_METHOD.search,
       { query: { range: { date: { gte: Date.now(), lte: Date.now() + 86_400_000 } } }, sort: [{ date: { order: 'asc' } }], size: 10 },
       token),
+    getMostRecentDiaries(3, token).catch(() => []),
   ])
 
   const promptMap = new Map(prompts.map((p) => [p.identifier, p]))
@@ -94,6 +95,16 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
   const newsResult: NewsResult = await fetchAndSummarizeNews(newsSummaryPrompt, personaPrompt)
   const newsContext = buildNewsContext(newsResult.summary)
 
+  // Posts anteriores — até 3, para manter narrativa conectada
+  const previousPostsContext = recentDiaries.length > 0
+    ? '\n\nSeus posts anteriores (do mais recente ao mais antigo):\n' +
+      recentDiaries.map((d, i) => {
+        const excerpt = d.content.replace(/[#*`>\-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 300)
+        return `--- Post ${i + 1} (${d.createdAt.slice(0, 10)}) ---\nTítulo: ${d.title}\nSubtítulo: ${d.subtitle}\nExcerto: ${excerpt}…`
+      }).join('\n\n') +
+      '\n\nUse esses posts como referência de continuidade narrativa quando fizer sentido — mas não force a conexão.'
+    : ''
+
   // Instrução explícita para Markdown e sem citação de fontes
   const markdownInstruction = `
 Retorne o conteúdo formatado em Markdown com seções usando ## para subtítulos, listas com *, negrito com ** e separadores com ---. Use seu próprio estilo — não cite portais, fontes ou sites. Escreva como se as ideias fossem suas, em primeira pessoa.
@@ -107,6 +118,7 @@ Retorne o conteúdo formatado em Markdown com seções usando ## para subtítulo
     `\n\nPróximos jogos (24h):\n${upcomingContext}`,
     `\n\nTop 10 ranking:\n${rankingContext}`,
     newsContext,
+    previousPostsContext,
     '\n\nRetorne APENAS JSON válido com os campos: title (string), subtitle (string), content (string com Markdown).',
   ].join('')
 

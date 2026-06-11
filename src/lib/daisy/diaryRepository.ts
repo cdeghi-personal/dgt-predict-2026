@@ -21,6 +21,21 @@ function mapDiary(raw: SydleDaisyDiary): DaisyDiary {
   }
 }
 
+export async function getMostRecentDiaries(limit: number, token: string): Promise<DaisyDiary[]> {
+  const raw = await sydleCall(
+    DAISY_PACKAGE,
+    SYDLE_CLASS.daisyDiary,
+    SYDLE_METHOD.search,
+    {
+      query: { match_all: {} },
+      sort: [{ _creationDate: { order: 'desc' } }],
+      size: limit,
+    },
+    token,
+  )
+  return parseSearch<SydleDaisyDiary>(raw).map(mapDiary)
+}
+
 export async function getActiveDiaries(token: string): Promise<DaisyDiary[]> {
   const raw = await sydleCall(
     DAISY_PACKAGE,
