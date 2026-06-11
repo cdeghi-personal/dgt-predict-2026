@@ -52,10 +52,11 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
   ])
 
   const promptMap = new Map(prompts.map((p) => [p.identifier, p]))
-  const personaPrompt     = promptMap.get(DAISY_PROMPT_IDENTIFIERS.persona)?.prompt     ?? ''
-  const diaryPrompt       = promptMap.get(DAISY_PROMPT_IDENTIFIERS.diary)?.prompt       ?? ''
-  const guessesPrompt     = promptMap.get(DAISY_PROMPT_IDENTIFIERS.guesses)?.prompt     ?? ''
-  const newsSummaryPrompt = promptMap.get(DAISY_PROMPT_IDENTIFIERS.newsSummary)?.prompt ?? ''
+  const personaPrompt      = promptMap.get(DAISY_PROMPT_IDENTIFIERS.persona)?.prompt      ?? ''
+  const diaryPrompt        = promptMap.get(DAISY_PROMPT_IDENTIFIERS.diary)?.prompt        ?? ''
+  const guessesPrompt      = promptMap.get(DAISY_PROMPT_IDENTIFIERS.guesses)?.prompt      ?? ''
+  const newsSummaryPrompt  = promptMap.get(DAISY_PROMPT_IDENTIFIERS.newsSummary)?.prompt  ?? ''
+  const matchAnalysisPrompt = promptMap.get(DAISY_PROMPT_IDENTIFIERS.matchAnalysis)?.prompt ?? ''
 
   const recentGames   = parseSearch<SydleGame>(gamesRaw)
   const recentResults = parseSearch<SydleResult>(resultsRaw)
@@ -154,16 +155,50 @@ Retorne o conteúdo formatado em Markdown com seções usando ## para subtítulo
     dateStr,
   )
 
-  // Palpites para os próximos jogos (falha não é fatal)
+  // Palpites para os próximos jogos — fluxo em 2 passos (falha não é fatal)
   if (upcomingGames.length > 0 && guessesPrompt) {
     try {
       const gamesCtx = upcomingGames.map((g) =>
         `gameId: ${g._id}, ${countryName(g.country1?._id)} vs ${countryName(g.country2?._id)}`
       ).join('\n')
 
+      // Passo 1 — análise intermediária por jogo (DAISY_MATCH_ANALYSIS)
+      let analysisContext = ''
+      if (matchAnalysisPrompt) {
+        try {
+          const analysisInput = [
+            matchAnalysisPrompt,
+            `\n\nResultados recentes (placar registrado):\n${matchContext}`,
+            pendingResultContext,
+            newsContext,
+            `\n\nJogos para análise:\n${gamesCtx}`,
+            '\n\nRetorne APENAS JSON válido: array de objetos com gameId, country1, country2, analysis.',
+          ].join('')
+
+          const analysisRaw = await callOpenAI(personaPrompt, analysisInput, { maxTokens: 1024, temperature: 0.5 })
+          const analysisArr = parseJsonFromText<{ gameId: string; country1: string; country2: string; analysis: string }[]>(analysisRaw)
+
+          if (Array.isArray(analysisArr) && analysisArr.length > 0) {
+            analysisContext = '\n\nAnálise prévia dos jogos:\n' +
+              analysisArr.map((a) => `${a.country1} vs ${a.country2}: ${a.analysis}`).join('\n')
+          }
+        } catch (err) {
+          console.error('[daisy] match analysis step failed (non-fatal):', err)
+        }
+      }
+
+      // Passo 2 — gera palpites com contexto enriquecido (DAISY_DAILY_GUESSES)
       const guessRaw = await callOpenAI(
         personaPrompt,
-        `${guessesPrompt}\n\nJogos para as próximas 24h:\n${gamesCtx}\n\nRetorne APENAS JSON válido: array de objetos com gameId, result1 e result2.`,
+        [
+          guessesPrompt,
+          `\n\nResultados recentes:\n${matchContext}`,
+          pendingResultContext,
+          newsContext,
+          analysisContext,
+          `\n\nJogos para as próximas 24h:\n${gamesCtx}`,
+          '\n\nRetorne APENAS JSON válido: array de objetos com gameId, result1 e result2.',
+        ].join(''),
         { maxTokens: 512, temperature: 0.7 },
       )
 
