@@ -73,6 +73,9 @@ export function Sidebar() {
         })}
       </nav>
 
+      {/* Build info */}
+      <BuildInfo />
+
       {/* Footer */}
       <div className="px-4 py-4 border-t border-white/10">
         <div className="flex items-center gap-2 mb-3">
@@ -93,6 +96,31 @@ export function Sidebar() {
         </button>
       </div>
     </aside>
+  )
+}
+
+// ─── Build info ───────────────────────────────────────────────────────────────
+
+function BuildInfo() {
+  const raw = process.env.NEXT_PUBLIC_BUILD_DATE
+  let buildLabel = '—'
+  if (raw) {
+    try {
+      const d = new Date(raw)
+      const day   = String(d.getDate()).padStart(2, '0')
+      const month = String(d.getMonth() + 1).padStart(2, '0')
+      const year  = d.getFullYear()
+      const hh    = String(d.getHours()).padStart(2, '0')
+      const mm    = String(d.getMinutes()).padStart(2, '0')
+      buildLabel = `${day}/${month}/${year} ${hh}:${mm}`
+    } catch { /* keep '—' */ }
+  }
+
+  return (
+    <div className="px-4 py-3 border-t border-white/10 text-center">
+      <p className="text-[11px] font-bold text-primary tracking-wide">DGT — Powered by IA</p>
+      <p className="text-[9px] text-white/30 mt-0.5">Build {buildLabel}</p>
+    </div>
   )
 }
 
