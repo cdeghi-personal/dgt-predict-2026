@@ -6,6 +6,7 @@
 //   - generateDiaryVideo(diary, token) — vídeo curto
 import { sydleCall, parseSearch } from '@/lib/sydle/client'
 import { SYDLE_PACKAGE, SYDLE_CLASS, SYDLE_METHOD } from '@/lib/sydle/constants'
+import { fetchCountryMap } from '@/lib/sydle/helpers'
 import { callOpenAI, parseJsonFromText } from './aiClient'
 import { getAllPrompts } from './promptRepository'
 import { createDiary, getMostRecentDiaries } from './diaryRepository'
@@ -35,7 +36,7 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
   const today = new Date()
   const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}T00:00:00Z`
 
-  const [prompts, gamesRaw, resultsRaw, guessesRaw, upcomingRaw, recentDiaries] = await Promise.all([
+  const [prompts, gamesRaw, resultsRaw, guessesRaw, upcomingRaw, recentDiaries, countryMap] = await Promise.all([
     getAllPrompts(token),
     sydleCall(SYDLE_PACKAGE, SYDLE_CLASS.games, SYDLE_METHOD.search,
       { query: { match_all: {} }, sort: [{ date: { order: 'desc' } }], size: 15 }, token),
@@ -47,6 +48,7 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
       { query: { range: { date: { gte: Date.now(), lte: Date.now() + 86_400_000 } } }, sort: [{ date: { order: 'asc' } }], size: 10 },
       token),
     getMostRecentDiaries(3, token).catch(() => []),
+    fetchCountryMap(token).catch(() => new Map()),
   ])
 
   const promptMap = new Map(prompts.map((p) => [p.identifier, p]))
@@ -62,11 +64,14 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
 
   const resultMap = new Map(recentResults.map((r) => [r.game?._id, r]))
 
+  const countryName = (id: string | undefined) =>
+    (id ? countryMap.get(id)?.country : undefined) ?? '?'
+
   // Últimos 5 jogos finalizados
   const finishedGames = recentGames.filter((g) => resultMap.has(g._id)).slice(0, 5)
   const matchContext = finishedGames.map((g) => {
     const r = resultMap.get(g._id)!
-    return `${g.country1?.name ?? '?'} ${r.result1} x ${r.result2} ${g.country2?.name ?? '?'}`
+    return `${countryName(g.country1?._id)} ${r.result1} x ${r.result2} ${countryName(g.country2?._id)}`
   }).join('\n') || 'Nenhum jogo finalizado ainda.'
 
   // Top 10 ranking calculado inline
@@ -88,7 +93,7 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
 
   // Próximos jogos
   const upcomingContext = upcomingGames.length
-    ? upcomingGames.map((g) => `${g.country1?.name ?? '?'} vs ${g.country2?.name ?? '?'}`).join('\n')
+    ? upcomingGames.map((g) => `${countryName(g.country1?._id)} vs ${countryName(g.country2?._id)}`).join('\n')
     : 'Nenhum jogo nas próximas 24h.'
 
   // Notícias das fontes externas (sem expor URLs na IA)
@@ -137,7 +142,7 @@ Retorne o conteúdo formatado em Markdown com seções usando ## para subtítulo
   if (upcomingGames.length > 0 && guessesPrompt) {
     try {
       const gamesCtx = upcomingGames.map((g) =>
-        `gameId: ${g._id}, ${g.country1?.name ?? '?'} vs ${g.country2?.name ?? '?'}`
+        `gameId: ${g._id}, ${countryName(g.country1?._id)} vs ${countryName(g.country2?._id)}`
       ).join('\n')
 
       const guessRaw = await callOpenAI(
