@@ -76,7 +76,17 @@ export async function GET(req: Request) {
       return a.userName.localeCompare(b.userName)
     })
 
-    entries.forEach((e, i) => { e.position = i + 1 })
+    entries.forEach((e, i) => {
+      if (i === 0) {
+        e.position = 1
+      } else {
+        const prev = entries[i - 1]
+        const tied = e.totalPoints === prev.totalPoints
+          && e.exactScores === prev.exactScores
+          && e.correctResults === prev.correctResults
+        e.position = tied ? prev.position : i + 1
+      }
+    })
 
     return NextResponse.json(entries)
   } catch (err) {

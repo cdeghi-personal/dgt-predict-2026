@@ -51,10 +51,18 @@ export default function MeusPalpitesPage() {
       .sort((a, b) => a.match.matchDate.localeCompare(b.match.matchDate))
   }, [guesses, matches, matchMap])
 
-  // Totais
-  const totalPoints = enriched.reduce((acc, { guess }) => acc + (guess.points ?? 0), 0)
-  const totalExact = enriched.filter(({ guess }) => guess.points === 10).length
-  const totalCorrect = enriched.filter(({ guess }) => guess.points === 5).length
+  // Totais — calculados contra o resultado real do jogo (guess.points é sempre null)
+  const { totalPoints, totalExact, totalCorrect } = useMemo(() => {
+    let pts = 0, exact = 0, correct = 0
+    for (const { guess, match } of enriched) {
+      if (match.scoreCountry1 == null || match.scoreCountry2 == null) continue
+      const { points, outcome } = calculatePoints(guess.result1, guess.result2, match.scoreCountry1, match.scoreCountry2)
+      pts += points
+      if (outcome === 'EXACT') exact++
+      if (outcome === 'CORRECT') correct++
+    }
+    return { totalPoints: pts, totalExact: exact, totalCorrect: correct }
+  }, [enriched])
 
   if (guessesLoading || matchesLoading) return <PageLoader />
 
