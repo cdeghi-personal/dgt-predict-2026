@@ -38,3 +38,20 @@ export interface GenerateDiaryResult {
   executionMs: number
   generatedAt: string
 }
+
+export interface DaisyGuessResult {
+  gameId: string
+  country1: string
+  country2: string
+  result1: number
+  result2: number
+  reasoning: string
+}
+
+export interface GenerateGuessesResult {
+  guesses: DaisyGuessResult[]
+  newsAnalyzed: number
+  gamesFound: number
+  executionMs: number
+  generatedAt: string
+}

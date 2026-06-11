@@ -12,7 +12,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import type { DaisyDiary } from '@/lib/types'
-import type { DaisyAITestResult, GenerateDiaryResult } from '@/lib/daisy/types'
+import type { DaisyAITestResult, GenerateDiaryResult, GenerateGuessesResult } from '@/lib/daisy/types'
 
 function useAdminDiaries() {
   const { authHeader } = useAuth()
@@ -100,6 +100,28 @@ export default function AdminDaisyPage() {
     onError: (err) => {
       setGenerateError(err instanceof Error ? err.message : 'Erro ao gerar diário.')
     },
+  })
+
+  // ── Card 3: Palpites da Daisy ───────────────────────────────────────────────
+  const [guessesResult, setGuessesResult] = useState<GenerateGuessesResult | null>(null)
+  const [guessesError, setGuessesError] = useState<string | null>(null)
+
+  const generateGuesses = useMutation({
+    mutationFn: async () => {
+      setGuessesResult(null)
+      setGuessesError(null)
+      const res = await fetch('/api/admin/daisy/generate-guesses', {
+        method: 'POST',
+        headers: authHeader(),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        throw new Error(d.error ?? 'Erro ao gerar palpites.')
+      }
+      return res.json() as Promise<GenerateGuessesResult>
+    },
+    onSuccess: (data) => setGuessesResult(data),
+    onError: (err) => setGuessesError(err instanceof Error ? err.message : 'Erro ao gerar palpites.'),
   })
 
   // ── Toggle ativo/inativo ────────────────────────────────────────────────────
@@ -236,6 +258,65 @@ export default function AdminDaisyPage() {
                 Visualizar Diário →
               </Button>
             </Link>
+          </div>
+        )}
+      </Card>
+
+      {/* ── Card 3: Palpites da Daisy ─────────────────────────────────────── */}
+      <Card className="p-4 space-y-3">
+        <div>
+          <h2 className="text-sm font-bold text-dark">🎯 Palpites da Daisy</h2>
+          <p className="text-xs text-mid-gray mt-0.5">
+            Consulta notícias, analisa os jogos das próximas 24h e registra os palpites da Daisy no bolão.
+          </p>
+        </div>
+
+        <Button variant="secondary" fullWidth loading={generateGuesses.isPending} onClick={() => generateGuesses.mutate()}>
+          🤖 Gerar Palpites da Daisy
+        </Button>
+
+        {generateGuesses.isPending && (
+          <p className="text-xs text-mid-gray text-center">Daisy está analisando os jogos e as notícias...</p>
+        )}
+
+        {guessesError && (
+          <div className="rounded-xl p-3 border bg-red-50 border-red-200">
+            <p className="text-xs font-bold text-red-700 mb-1">❌ Erro na geração</p>
+            <p className="text-xs text-red-600">{guessesError}</p>
+          </div>
+        )}
+
+        {guessesResult && (
+          <div className="rounded-xl p-3 border bg-green-50 border-green-200 space-y-3">
+            {guessesResult.gamesFound === 0 ? (
+              <p className="text-sm text-amber-700 font-medium">⚠️ Nenhum jogo nas próximas 24h.</p>
+            ) : (
+              <>
+                <p className="font-bold text-green-700 text-sm">
+                  ✅ {guessesResult.guesses.length} palpite(s) registrado(s)!
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  <StatCell label="Jogos" value={String(guessesResult.gamesFound)} />
+                  <StatCell label="Notícias" value={String(guessesResult.newsAnalyzed)} />
+                  <StatCell label="Tempo" value={formatMs(guessesResult.executionMs)} />
+                </div>
+                {guessesResult.guesses.length > 0 && (
+                  <div className="space-y-2">
+                    {guessesResult.guesses.map((g) => (
+                      <div key={g.gameId} className="bg-white rounded-lg border border-green-200 p-2.5">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-bold text-dark">{g.country1} vs {g.country2}</span>
+                          <span className="text-sm font-bold text-primary">{g.result1} × {g.result2}</span>
+                        </div>
+                        {g.reasoning && (
+                          <p className="text-[11px] text-mid-gray italic leading-snug">{g.reasoning}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
       </Card>
