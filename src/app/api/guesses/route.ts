@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { sydleCall, parseSearch } from '@/lib/sydle/client'
+import { sydleCall, parseSearch, parseSearchFirst } from '@/lib/sydle/client'
 import { SYDLE_PACKAGE, SYDLE_CLASS, SYDLE_METHOD } from '@/lib/sydle/constants'
 import { mapGuess } from '@/lib/mappers'
 import type { SydleGuess, SydleGame } from '@/lib/types'
@@ -62,9 +62,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Dados incompletos.' }, { status: 400 })
     }
 
-    // Valida que o jogo ainda não começou
-    const game = await sydleCall(SYDLE_PACKAGE, SYDLE_CLASS.games, SYDLE_METHOD.get, { _id: matchId }, token).catch(() => null) as SydleGame | null
-    if (game && matchStarted(game)) {
+    // Valida que o jogo existe e ainda não começou
+    const game = await sydleCall(SYDLE_PACKAGE, SYDLE_CLASS.games, SYDLE_METHOD.search, {
+      query: { term: { _id: matchId } }, size: 1,
+    }, token).then((r) => parseSearchFirst<SydleGame>(r)).catch(() => null)
+    if (!game) {
+      return NextResponse.json({ error: 'Jogo não encontrado.' }, { status: 404 })
+    }
+    if (matchStarted(game)) {
       return NextResponse.json({ error: 'O prazo para palpitar neste jogo encerrou.' }, { status: 422 })
     }
 
