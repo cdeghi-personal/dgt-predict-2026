@@ -71,9 +71,19 @@ export function MatchCard({ match, guess, onGuess, compact }: MatchCardProps) {
               +{guess.points} pts
             </span>
           )}
-          {/* Label "Seu palpite" quando ainda não tem resultado */}
+          {/* Label "Seu palpite" + link Alterar quando ainda não tem resultado */}
           {!isFinished && guess && (
-            <span className="text-[10px] text-mid-gray">seu palpite</span>
+            <div className="flex flex-col items-center gap-0.5">
+              <span className="text-[10px] text-mid-gray">seu palpite</span>
+              {onGuess && (
+                <button
+                  onClick={onGuess}
+                  className="text-[10px] text-mid-gray hover:text-dark flex items-center gap-0.5 hover:underline transition-colors"
+                >
+                  ✏️ alterar
+                </button>
+              )}
+            </div>
           )}
         </div>
 
@@ -89,25 +99,14 @@ export function MatchCard({ match, guess, onGuess, compact }: MatchCardProps) {
         </div>
       </div>
 
-      {/* CTA palpitar */}
-      {onGuess && (
-        guess ? (
-          <div className="mt-2 flex justify-center">
-            <button
-              onClick={onGuess}
-              className="text-xs text-mid-gray hover:text-dark flex items-center gap-1 px-3 py-1 rounded-lg hover:bg-gray-100 transition-colors"
-            >
-              ✏️ Alterar Palpite
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={onGuess}
-            className="mt-3 w-full py-2 rounded-xl text-sm font-semibold transition-colors bg-primary text-dark hover:bg-amber-400"
-          >
-            ⚽ Dar Palpite
-          </button>
-        )
+      {/* CTA palpitar — só quando ainda não tem palpite */}
+      {onGuess && !guess && (
+        <button
+          onClick={onGuess}
+          className="mt-3 w-full py-2 rounded-xl text-sm font-semibold transition-colors bg-primary text-dark hover:bg-amber-400"
+        >
+          ⚽ Dar Palpite
+        </button>
       )}
     </Card>
   )

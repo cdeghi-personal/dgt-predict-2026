@@ -48,10 +48,9 @@ export default function LoginPage() {
         <div className="flex flex-col items-center gap-3 mb-8">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/assets/logo-dgt.png"
+            src="/logo-dgt.png"
             alt="DGT"
             className="h-14 w-auto object-contain"
-            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
           />
           <div className="text-center">
             <h1 className="text-2xl font-bold text-white">DGT Predict</h1>
@@ -96,7 +95,7 @@ export default function LoginPage() {
         </form>
 
         <p className="text-center text-white/30 text-xs mt-6">
-          DGT Consultoria · Bolão Copa 2026
+          DGT Transformação Digital · Powered by IA
         </p>
       </div>
     </div>
