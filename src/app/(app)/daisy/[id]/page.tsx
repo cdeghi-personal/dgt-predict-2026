@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { PageLoader } from '@/components/ui/LoadingSpinner'
+import { DaisyMarkdown } from '@/components/features/DaisyMarkdown'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import type { DaisyDiary } from '@/lib/types'
@@ -25,7 +26,7 @@ function useDiary(id: string) {
 
 function formatDate(iso: string) {
   try {
-    return format(parseISO(iso), "d 'de' MMMM 'de' yyyy, HH:mm", { locale: ptBR })
+    return format(parseISO(iso), "d 'de' MMMM 'de' yyyy", { locale: ptBR })
   } catch {
     return iso
   }
@@ -49,41 +50,79 @@ export default function DaisyEntryPage({ params }: { params: Promise<{ id: strin
     )
   }
 
+  const dateLabel = diary.date
+    ? formatDate(diary.date)
+    : formatDate(diary.createdAt)
+
   return (
-    <div className="space-y-5 max-w-2xl mx-auto">
+    <div className="max-w-2xl mx-auto space-y-5 pb-10">
+
       {/* Voltar */}
       <Link href="/daisy" className="flex items-center gap-1 text-sm text-mid-gray hover:text-dark transition-colors">
         ← Diário da Daisy
       </Link>
 
-      {/* Header da entrada */}
-      <div className="bg-dark rounded-2xl p-5 text-white">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-lg">
-            🤖
+      {/* ── Hero — identidade da Daisy ─────────────────────────────────────── */}
+      <div className="relative bg-dark rounded-2xl overflow-hidden">
+        {/* Fundo gradiente decorativo */}
+        <div className="absolute inset-0 bg-gradient-to-br from-violet-900/40 via-dark to-dark pointer-events-none" />
+        <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+
+        <div className="relative p-6">
+          {/* Linha superior: avatar + badges */}
+          <div className="flex items-start gap-4 mb-5">
+            <DaisyAvatarLarge />
+            <div className="flex-1 pt-1">
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                <span className="inline-flex items-center gap-1 bg-violet-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  ⚡ IA DGT
+                </span>
+                <span className="inline-flex items-center gap-1 bg-white/10 text-white/70 text-[10px] font-medium px-2 py-0.5 rounded-full">
+                  Consultora Virtual
+                </span>
+                <span className="inline-flex items-center gap-1 bg-white/10 text-white/70 text-[10px] font-medium px-2 py-0.5 rounded-full">
+                  📡 Radar de Dados
+                </span>
+              </div>
+              <p className="text-xs text-white/50">{dateLabel}</p>
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-bold">Daisy</p>
-            <p className="text-xs text-white/60">{formatDate(diary.createdAt)}</p>
-          </div>
+
+          {/* Título e subtítulo */}
+          <h1 className="text-xl font-bold text-white leading-snug mb-2">{diary.title}</h1>
+          {diary.subtitle && (
+            <p className="text-sm text-white/70 leading-relaxed">{diary.subtitle}</p>
+          )}
         </div>
-        <h1 className="text-xl font-bold leading-snug">{diary.title}</h1>
-        {diary.subtitle && (
-          <p className="text-sm text-white/70 mt-2">{diary.subtitle}</p>
-        )}
       </div>
 
-      {/* Conteúdo */}
-      <div className="bg-white rounded-2xl border border-light-gray p-5">
-        <div className="prose prose-sm max-w-none text-dark leading-relaxed whitespace-pre-wrap">
-          {diary.content}
-        </div>
+      {/* ── Conteúdo em Markdown ────────────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-light-gray px-6 py-6">
+        <DaisyMarkdown content={diary.content} />
       </div>
 
-      {/* Footer */}
-      <div className="text-center text-xs text-mid-gray pb-4">
-        Gerado por Daisy · DGT Predict 2026
+      {/* ── Rodapé ─────────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-center gap-2 text-xs text-mid-gray pb-2">
+        <span>🤖</span>
+        <span>Gerado por Daisy · DGT Consultoria · DGT Predict 2026</span>
       </div>
+
+    </div>
+  )
+}
+
+// ─── Avatar grande da Daisy ────────────────────────────────────────────────────
+
+function DaisyAvatarLarge() {
+  return (
+    <div className="relative shrink-0">
+      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-violet-800 flex items-center justify-center shadow-lg">
+        <span className="text-2xl select-none">🤖</span>
+      </div>
+      {/* Pulse animado — indica que é IA ativa */}
+      <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-primary rounded-full border-2 border-dark flex items-center justify-center">
+        <span className="text-[8px]">✦</span>
+      </span>
     </div>
   )
 }

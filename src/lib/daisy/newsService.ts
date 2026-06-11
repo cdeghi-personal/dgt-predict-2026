@@ -1,4 +1,5 @@
 // Server-side only — busca e resume notícias de fontes externas
+// As URLs das fontes são usadas apenas como contexto da IA; nunca são expostas no conteúdo final.
 import { callOpenAI } from './aiClient'
 import type { NewsResult } from './types'
 
@@ -34,7 +35,8 @@ export async function fetchAndSummarizeNews(
     const url = NEWS_SOURCES[i]
     if (r.status === 'fulfilled') {
       successUrls.push(url)
-      textParts.push(`Fonte: ${url}\n${r.value.text}`)
+      // Passa o conteúdo sem identificar a fonte — evita que a IA cite portais
+      textParts.push(r.value.text)
     } else {
       errorUrls.push(url)
     }
@@ -45,7 +47,7 @@ export async function fetchAndSummarizeNews(
     try {
       summary = await callOpenAI(
         personaPrompt,
-        `${newsSummaryPrompt}\n\nConteúdos das fontes:\n\n${textParts.join('\n\n---\n\n')}`,
+        `${newsSummaryPrompt}\n\nConteúdo esportivo recente:\n\n${textParts.join('\n\n---\n\n')}`,
         { maxTokens: 512, temperature: 0.3 },
       )
     } catch {
@@ -54,7 +56,7 @@ export async function fetchAndSummarizeNews(
   }
 
   return {
-    items: successUrls.map((url) => ({ url, title: '', description: '' })),
+    items: [],  // URLs não expostas no conteúdo final
     successUrls,
     errorUrls,
     summary,
@@ -63,5 +65,5 @@ export async function fetchAndSummarizeNews(
 
 export function buildNewsContext(newsText: string): string {
   if (!newsText.trim()) return ''
-  return `\n\nNotícias do dia:\n${newsText.trim()}`
+  return `\n\nContexto esportivo recente:\n${newsText.trim()}`
 }

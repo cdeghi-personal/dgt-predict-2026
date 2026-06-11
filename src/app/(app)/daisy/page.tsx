@@ -2,7 +2,6 @@
 
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
-import Image from 'next/image'
 import { useAuth } from '@/contexts/AuthContext'
 import { PageLoader } from '@/components/ui/LoadingSpinner'
 import { format, parseISO } from 'date-fns'
@@ -37,19 +36,28 @@ export default function DaisyPage() {
   if (isLoading) return <PageLoader />
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <div className="w-14 h-14 rounded-full bg-dark flex items-center justify-center text-2xl shrink-0 overflow-hidden">
-          <DaisyAvatar />
+    <div className="space-y-6 max-w-2xl mx-auto">
+
+      {/* ── Header da Daisy ────────────────────────────────────────────────── */}
+      <div className="bg-dark rounded-2xl p-5 flex items-center gap-4">
+        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500 to-violet-800 flex items-center justify-center text-2xl shadow shrink-0">
+          🤖
         </div>
-        <div>
-          <h1 className="text-xl font-bold text-dark">Diário da Daisy</h1>
-          <p className="text-sm text-mid-gray">Análises e palpites da consultora virtual da DGT</p>
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap gap-1.5 mb-1.5">
+            <span className="inline-flex items-center gap-1 bg-violet-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+              ⚡ IA DGT
+            </span>
+            <span className="inline-flex items-center gap-1 bg-white/10 text-white/70 text-[10px] px-2 py-0.5 rounded-full">
+              📡 Radar de Dados
+            </span>
+          </div>
+          <h1 className="text-lg font-bold text-white leading-tight">Diário da Daisy</h1>
+          <p className="text-xs text-white/50 mt-0.5">Análises e palpites da consultora virtual da DGT</p>
         </div>
       </div>
 
-      {/* Lista de entradas */}
+      {/* ── Lista de entradas ──────────────────────────────────────────────── */}
       {!diaries || diaries.length === 0 ? (
         <div className="text-center py-16 text-mid-gray">
           <p className="text-4xl mb-3">📓</p>
@@ -63,34 +71,40 @@ export default function DaisyPage() {
           ))}
         </div>
       )}
+
     </div>
   )
 }
 
 function DiaryCard({ diary, featured }: { diary: DaisyDiary; featured?: boolean }) {
+  const dateLabel = diary.date ? formatDate(diary.date) : formatDate(diary.createdAt)
+
   return (
     <Link href={`/daisy/${diary.id}`}>
-      <div className={`bg-white rounded-2xl border transition-shadow hover:shadow-md ${featured ? 'border-primary/40 shadow-sm' : 'border-light-gray'} p-4`}>
-        {featured && (
-          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-primary uppercase tracking-wide mb-2">
-            ✨ Mais recente
+      <div className={`bg-white rounded-2xl border transition-all hover:shadow-md hover:-translate-y-0.5 ${featured ? 'border-violet-200 shadow-sm' : 'border-light-gray'} p-4`}>
+        <div className="flex items-start justify-between gap-2 mb-2">
+          {featured ? (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full">
+              ✨ Mais recente
+            </span>
+          ) : (
+            <span className="text-xs text-mid-gray">{dateLabel}</span>
+          )}
+          <span className="text-[10px] font-bold text-violet-600 bg-violet-50 px-1.5 py-0.5 rounded-full shrink-0">
+            IA DGT
           </span>
-        )}
+        </div>
+
         <h2 className="text-base font-bold text-dark leading-snug">{diary.title}</h2>
         {diary.subtitle && (
           <p className="text-sm text-mid-gray mt-1 line-clamp-2">{diary.subtitle}</p>
         )}
-        <div className="flex items-center justify-between mt-3">
-          <span className="text-xs text-mid-gray">{formatDate(diary.createdAt)}</span>
-          <span className="text-xs text-primary font-semibold">Ler mais →</span>
+
+        <div className="flex items-center justify-between mt-3 pt-3 border-t border-light-gray">
+          {featured && <span className="text-xs text-mid-gray">{dateLabel}</span>}
+          <span className="text-xs text-primary font-semibold ml-auto">Ler edição →</span>
         </div>
       </div>
     </Link>
-  )
-}
-
-function DaisyAvatar() {
-  return (
-    <span className="text-2xl select-none">🤖</span>
   )
 }

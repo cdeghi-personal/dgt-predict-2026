@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -34,6 +35,11 @@ function formatDate(iso: string) {
   }
 }
 
+function formatMs(ms: number): string {
+  if (ms < 1000) return `${ms}ms`
+  return `${(ms / 1000).toFixed(1)}s`
+}
+
 export default function AdminDaisyPage() {
   const { user, authHeader } = useAuth()
   const router = useRouter()
@@ -55,8 +61,7 @@ export default function AdminDaisyPage() {
         method: 'POST',
         headers: authHeader(),
       })
-      const data = await res.json() as DaisyAITestResult
-      return data
+      return res.json() as Promise<DaisyAITestResult>
     },
     onSuccess: (data) => setTestResult(data),
     onError: (err) => {
@@ -123,7 +128,7 @@ export default function AdminDaisyPage() {
         <p className="text-sm text-mid-gray">{diaries?.length ?? 0} entradas no diário</p>
       </div>
 
-      {/* ── Card 1: Diagnóstico da Daisy ──────────────────────────────────────── */}
+      {/* ── Card 1: Diagnóstico ────────────────────────────────────────────── */}
       <Card className="p-4 space-y-3">
         <div>
           <h2 className="text-sm font-bold text-dark">🔌 Diagnóstico da Daisy</h2>
@@ -132,42 +137,27 @@ export default function AdminDaisyPage() {
           </p>
         </div>
 
-        <Button
-          variant="secondary"
-          fullWidth
-          loading={testAI.isPending}
-          onClick={() => testAI.mutate()}
-        >
+        <Button variant="secondary" fullWidth loading={testAI.isPending} onClick={() => testAI.mutate()}>
           Testar Conexão com IA
         </Button>
 
         {testAI.isPending && (
-          <p className="text-xs text-mid-gray text-center">
-            Daisy está verificando sua conexão com a IA...
-          </p>
+          <p className="text-xs text-mid-gray text-center">Daisy está verificando sua conexão com a IA...</p>
         )}
 
         {testResult && (
           <div className={`rounded-xl p-3 border text-sm ${testResult.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
             {testResult.success ? (
               <>
-                <p className="font-bold text-green-700 mb-1">
-                  ✅ Conexão com IA funcionando
-                </p>
-                <p className="text-xs text-green-600 mb-2">
-                  Provedor: {testResult.provider} · Modelo: {testResult.model}
-                </p>
+                <p className="font-bold text-green-700 mb-1">✅ Conexão com IA funcionando</p>
+                <p className="text-xs text-green-600 mb-2">Provedor: {testResult.provider} · Modelo: {testResult.model}</p>
                 {testResult.message && (
-                  <p className="text-xs text-dark italic border-t border-green-200 pt-2">
-                    &ldquo;{testResult.message}&rdquo;
-                  </p>
+                  <p className="text-xs text-dark italic border-t border-green-200 pt-2">&ldquo;{testResult.message}&rdquo;</p>
                 )}
               </>
             ) : (
               <>
-                <p className="font-bold text-red-700 mb-1">
-                  ❌ Falha na conexão com IA
-                </p>
+                <p className="font-bold text-red-700 mb-1">❌ Falha na conexão com IA</p>
                 <p className="text-xs text-red-600">{testResult.error}</p>
               </>
             )}
@@ -175,27 +165,22 @@ export default function AdminDaisyPage() {
         )}
       </Card>
 
-      {/* ── Card 2: Processo diário da Daisy ─────────────────────────────────── */}
+      {/* ── Card 2: Geração ────────────────────────────────────────────────── */}
       <Card className="p-4 space-y-3">
         <div>
           <h2 className="text-sm font-bold text-dark">📓 Processo diário da Daisy</h2>
           <p className="text-xs text-mid-gray mt-0.5">
-            Busca notícias, analisa jogos e ranking, e gera uma nova entrada do diário.
+            Busca notícias, analisa jogos e ranking, e gera uma nova entrada do diário em Markdown.
           </p>
         </div>
 
-        <Button
-          variant="primary"
-          fullWidth
-          loading={generate.isPending}
-          onClick={() => generate.mutate()}
-        >
+        <Button variant="primary" fullWidth loading={generate.isPending} onClick={() => generate.mutate()}>
           🤖 Gerar Diário da Daisy
         </Button>
 
         {generate.isPending && (
           <p className="text-xs text-mid-gray text-center">
-            Daisy está lendo as notícias da Copa e preparando o diário...
+            Daisy está processando dados e preparando o diário...
           </p>
         )}
 
@@ -207,29 +192,31 @@ export default function AdminDaisyPage() {
         )}
 
         {generateResult && (
-          <div className="rounded-xl p-3 border bg-green-50 border-green-200 space-y-2">
+          <div className="rounded-xl p-3 border bg-green-50 border-green-200 space-y-3">
             <p className="font-bold text-green-700 text-sm">✅ Diário gerado com sucesso!</p>
 
+            {/* Dados do diário */}
             <div className="text-xs text-dark space-y-0.5">
-              <p><span className="font-semibold">Título:</span> {generateResult.diary.title}</p>
+              <p><span className="font-semibold text-mid-gray">Título:</span> {generateResult.diary.title}</p>
               {generateResult.diary.subtitle && (
-                <p><span className="font-semibold">Subtítulo:</span> {generateResult.diary.subtitle}</p>
+                <p><span className="font-semibold text-mid-gray">Subtítulo:</span> {generateResult.diary.subtitle}</p>
               )}
-              <p><span className="font-semibold">Criado em:</span> {formatDate(generateResult.diary.createdAt)}</p>
+              <p><span className="font-semibold text-mid-gray">Data:</span> {formatDate(generateResult.diary.createdAt)}</p>
             </div>
 
-            <div className="text-xs text-mid-gray border-t border-green-200 pt-2 space-y-0.5">
-              <p>
-                🌐 Fontes lidas:{' '}
-                <span className="text-green-700 font-semibold">{generateResult.newsResult.successUrls.length}</span>
-                {generateResult.newsResult.errorUrls.length > 0 && (
-                  <span className="text-red-500 ml-1">
-                    · {generateResult.newsResult.errorUrls.length} com erro
-                  </span>
-                )}
-              </p>
-              <p>⏱ Gerado em: {formatDate(generateResult.generatedAt)}</p>
+            {/* Estatísticas */}
+            <div className="grid grid-cols-3 gap-2">
+              <StatCell label="Notícias" value={String(generateResult.newsAnalyzed)} />
+              <StatCell label="Jogos" value={String(generateResult.gamesConsidered)} />
+              <StatCell label="Tempo" value={formatMs(generateResult.executionMs)} />
             </div>
+
+            {/* Botão visualizar */}
+            <Link href={`/daisy/${generateResult.diary.id}`}>
+              <Button variant="secondary" fullWidth>
+                Visualizar Diário →
+              </Button>
+            </Link>
           </div>
         )}
       </Card>
@@ -264,6 +251,17 @@ export default function AdminDaisyPage() {
   )
 }
 
+// ─── Sub-componentes ──────────────────────────────────────────────────────────
+
+function StatCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-white rounded-lg border border-green-200 p-2 text-center">
+      <p className="text-sm font-bold text-dark">{value}</p>
+      <p className="text-[10px] text-mid-gray">{label}</p>
+    </div>
+  )
+}
+
 function DiaryAdminCard({
   diary,
   onToggle,
@@ -289,11 +287,14 @@ function DiaryAdminCard({
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <Link href={`/daisy/${diary.id}`} className="text-xs text-primary font-semibold hover:underline">
+            Ver
+          </Link>
           <button
             onClick={() => setExpanded((e) => !e)}
             className="text-xs text-mid-gray underline hover:text-dark"
           >
-            {expanded ? 'Fechar' : 'Ver'}
+            {expanded ? 'Fechar' : 'Preview'}
           </button>
           <button
             onClick={() => onToggle(!diary.active)}
@@ -307,7 +308,7 @@ function DiaryAdminCard({
 
       {expanded && (
         <div className="mt-3 pt-3 border-t border-light-gray">
-          <p className="text-sm text-dark leading-relaxed whitespace-pre-wrap">{diary.content}</p>
+          <p className="text-sm text-dark leading-relaxed whitespace-pre-wrap line-clamp-6">{diary.content}</p>
         </div>
       )}
     </Card>

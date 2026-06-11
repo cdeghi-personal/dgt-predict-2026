@@ -33,5 +33,8 @@ export interface NewsResult {
 export interface GenerateDiaryResult {
   diary: DaisyDiary
   newsResult: NewsResult
+  newsAnalyzed: number
+  gamesConsidered: number
+  executionMs: number
   generatedAt: string
 }

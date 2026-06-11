@@ -1,4 +1,9 @@
 // Server-side only — orquestra geração do Diário da Daisy
+// Arquitetura desacoplada para permitir extensões futuras:
+//   - generateDiaryImage(diary, token) — capa do diário
+//   - generateDiaryAudio(diary, token) — resumo em áudio
+//   - generateDiaryNewsletter(diary, token) — newsletter
+//   - generateDiaryVideo(diary, token) — vídeo curto
 import { sydleCall, parseSearch } from '@/lib/sydle/client'
 import { SYDLE_PACKAGE, SYDLE_CLASS, SYDLE_METHOD } from '@/lib/sydle/constants'
 import { callOpenAI, parseJsonFromText } from './aiClient'
@@ -25,6 +30,8 @@ interface GuessAIResponse {
 }
 
 export async function generateDailyDiary(token: string): Promise<GenerateDiaryResult> {
+  const startTime = Date.now()
+
   const today = new Date()
   const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}T00:00:00Z`
 
@@ -83,18 +90,24 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
     ? upcomingGames.map((g) => `${g.country1?.name ?? '?'} vs ${g.country2?.name ?? '?'}`).join('\n')
     : 'Nenhum jogo nas próximas 24h.'
 
-  // Notícias das 5 fontes externas
+  // Notícias das fontes externas (sem expor URLs na IA)
   const newsResult: NewsResult = await fetchAndSummarizeNews(newsSummaryPrompt, personaPrompt)
   const newsContext = buildNewsContext(newsResult.summary)
+
+  // Instrução explícita para Markdown e sem citação de fontes
+  const markdownInstruction = `
+Retorne o conteúdo formatado em Markdown com seções usando ## para subtítulos, listas com *, negrito com ** e separadores com ---. Use seu próprio estilo — não cite portais, fontes ou sites. Escreva como se as ideias fossem suas, em primeira pessoa.
+`
 
   // Gera diário via OpenAI
   const diaryUserMessage = [
     diaryPrompt,
+    markdownInstruction,
     `\n\nResultados recentes:\n${matchContext}`,
     `\n\nPróximos jogos (24h):\n${upcomingContext}`,
     `\n\nTop 10 ranking:\n${rankingContext}`,
     newsContext,
-    '\n\nRetorne APENAS JSON válido com os campos: title, subtitle, content.',
+    '\n\nRetorne APENAS JSON válido com os campos: title (string), subtitle (string), content (string com Markdown).',
   ].join('')
 
   const diaryRaw = await callOpenAI(personaPrompt, diaryUserMessage, { maxTokens: 2048, temperature: 0.8 })
@@ -103,7 +116,7 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
   const diary = await createDiary(
     sanitize(diaryJson.title ?? 'Diário da Daisy'),
     sanitize(diaryJson.subtitle ?? ''),
-    sanitize(diaryJson.content ?? ''),
+    diaryJson.content ?? '',  // Markdown — não sanitizar com strip-tags
     token,
     dateStr,
   )
@@ -137,9 +150,14 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
     }
   }
 
+  const executionMs = Date.now() - startTime
+
   return {
     diary,
     newsResult,
+    newsAnalyzed: newsResult.successUrls.length,
+    gamesConsidered: finishedGames.length + upcomingGames.length,
+    executionMs,
     generatedAt: new Date().toISOString(),
   }
 }
