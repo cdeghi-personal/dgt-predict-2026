@@ -116,8 +116,9 @@ export default function DaisyEntryPage({ params }: { params: Promise<{ id: strin
 function DaisyAvatarLarge() {
   return (
     <div className="relative shrink-0">
-      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-violet-800 flex items-center justify-center shadow-lg">
-        <span className="text-2xl select-none">🤖</span>
+      <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-lg">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/daisy.png" alt="Daisy" className="w-full h-full object-cover" />
       </div>
       {/* Pulse animado — indica que é IA ativa */}
       <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-primary rounded-full border-2 border-dark flex items-center justify-center">

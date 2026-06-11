@@ -40,8 +40,9 @@ export default function DaisyPage() {
 
       {/* ── Header da Daisy ────────────────────────────────────────────────── */}
       <div className="bg-dark rounded-2xl p-5 flex items-center gap-4">
-        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500 to-violet-800 flex items-center justify-center text-2xl shadow shrink-0">
-          🤖
+        <div className="w-14 h-14 rounded-2xl overflow-hidden shadow shrink-0">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/daisy.png" alt="Daisy" className="w-full h-full object-cover" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap gap-1.5 mb-1.5">
