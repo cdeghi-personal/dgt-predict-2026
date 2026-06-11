@@ -5,7 +5,11 @@ import { Providers } from './providers'
 export const metadata: Metadata = {
   title: 'DGT Predict 2026 — Copa do Mundo',
   description: 'Bolão interno da DGT para a Copa do Mundo FIFA 2026',
-  icons: { icon: '/favicon.ico' },
+  openGraph: {
+    title: 'DGT Predict 2026',
+    description: 'Bolão interno da DGT para a Copa do Mundo FIFA 2026',
+    images: [{ url: '/logo-dgt.png', width: 512, height: 512, alt: 'DGT' }],
+  },
 }
 
 export const viewport: Viewport = {
