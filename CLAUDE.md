@@ -33,6 +33,22 @@ X-Explorer-Account-Token: <org>
 Content-Type: application/json
 ```
 
+### `_patch` — formato JSON Patch
+
+O SYDLE usa JSON Patch (RFC 6902) para atualizações parciais:
+
+```ts
+sydleCall(pkg, cls, '_patch', {
+  _id: objectId,
+  _operationsList: [
+    { op: 'replace', path: '/fieldName', value: newValue },
+    { op: 'replace', path: '/otherField', value: otherValue },
+  ],
+}, token)
+```
+
+**Nunca** enviar campos diretos como `{ _id, Active: true }` — o SYDLE ignora silenciosamente. Sempre usar `_operationsList`.
+
 ### Identificador da aplicação
 
 `dgtPredict` — deve estar criado no painel SYDLE ONE do org configurado.
