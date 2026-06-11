@@ -1,0 +1,46 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+@import "tailwindcss";
+
+/* Tailwind v4 — definição das cores e fontes do tema */
+@theme {
+  --color-primary: #FCB017;
+  --color-secondary: #FED402;
+  --color-dark: #3A3A3A;
+  --color-mid-gray: #787878;
+  --color-light-gray: #D3D3D3;
+  --color-background: #F5F5F5;
+  --color-surface: #FFFFFF;
+
+  --font-family-sans: 'Inter', sans-serif;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: #F5F5F5;
+  color: #3A3A3A;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Remove number input arrows */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+}
+
+/* Scrollbar discreta */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #D3D3D3;
+  border-radius: 2px;
+}
