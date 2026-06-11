@@ -48,7 +48,7 @@ export default function ClassificacaoPage() {
 
       {standings.size > 0 && (
         <>
-          <h2 className="text-sm font-bold text-dark uppercase tracking-wide -mb-3">Fase de Grupos</h2>
+          <h2 className="text-sm font-bold text-dark uppercase tracking-wide ">Fase de Grupos</h2>
           {[...standings.entries()].map(([group, teams]) => (
             <GroupTable key={group} group={group} teams={teams} />
           ))}
@@ -58,7 +58,7 @@ export default function ClassificacaoPage() {
 
       {knockoutByPhase.length > 0 && (
         <>
-          <h2 className="text-sm font-bold text-dark uppercase tracking-wide -mb-3">Fase Eliminatória</h2>
+          <h2 className="text-sm font-bold text-dark uppercase tracking-wide ">Fase Eliminatória</h2>
           {knockoutByPhase.map(({ phase, games }) => (
             <KnockoutPhaseTable key={phase} phase={phase} games={games} />
           ))}
