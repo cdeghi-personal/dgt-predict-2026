@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { sydleCall, parseSearch } from '@/lib/sydle/client'
+import { sydleCall, parseSearchFirst } from '@/lib/sydle/client'
 import { SYDLE_PACKAGE, SYDLE_CLASS, SYDLE_METHOD } from '@/lib/sydle/constants'
 import type { SydleGame, SydleGuess } from '@/lib/types'
 
@@ -28,19 +28,31 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     }
 
     // Resolve o jogo vinculado ao palpite e valida o horário
-    const guessRaw = await sydleCall(SYDLE_PACKAGE, SYDLE_CLASS.guesses, SYDLE_METHOD.get, { _id: id }, token).catch(() => null) as SydleGuess | null
+    const guessRaw = await sydleCall(SYDLE_PACKAGE, SYDLE_CLASS.guesses, SYDLE_METHOD.search, {
+      query: { term: { _id: id } }, size: 1,
+    }, token).then((r) => parseSearchFirst<SydleGuess>(r)).catch(() => null)
+
     if (guessRaw?.game?._id) {
-      const game = await sydleCall(SYDLE_PACKAGE, SYDLE_CLASS.games, SYDLE_METHOD.get, { _id: guessRaw.game._id }, token).catch(() => null) as SydleGame | null
+      const game = await sydleCall(SYDLE_PACKAGE, SYDLE_CLASS.games, SYDLE_METHOD.search, {
+        query: { term: { _id: guessRaw.game._id } }, size: 1,
+      }, token).then((r) => parseSearchFirst<SydleGame>(r)).catch(() => null)
       if (game && matchStarted(game)) {
         return NextResponse.json({ error: 'O prazo para palpitar neste jogo encerrou.' }, { status: 422 })
       }
     }
 
+    // _update com objeto completo — mais confiável que _patch
     const raw = await sydleCall(
       SYDLE_PACKAGE,
       SYDLE_CLASS.guesses,
-      SYDLE_METHOD.patch,
-      { _id: id, result1: Number(result1), result2: Number(result2) },
+      SYDLE_METHOD.update,
+      {
+        _id: id,
+        user: guessRaw?.user ? { _id: guessRaw.user._id } : undefined,
+        game: { _id: guessRaw?.game._id },
+        result1: Number(result1),
+        result2: Number(result2),
+      },
       token,
     )
 

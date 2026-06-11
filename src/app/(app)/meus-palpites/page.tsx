@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/Badge'
 import { CountryFlag } from '@/components/features/CountryFlag'
 import { PageLoader } from '@/components/ui/LoadingSpinner'
 import { GuessForm } from '@/components/features/GuessForm'
+import { MatchGuessesModal } from '@/components/features/MatchGuessesModal'
 import { useMyGuesses } from '@/hooks/useGuesses'
 import { useMatches } from '@/hooks/useMatches'
 import { isGuessingClosed, formatMatchDate, PHASE_LABELS } from '@/lib/utils/dates'
@@ -38,6 +39,7 @@ export default function MeusPalpitesPage() {
   const { data: guesses, isLoading: guessesLoading } = useMyGuesses()
   const { data: matches, isLoading: matchesLoading } = useMatches()
   const [editingGuess, setEditingGuess] = useState<{ guess: Guess; match: Match } | null>(null)
+  const [viewGuessesMatch, setViewGuessesMatch] = useState<Match | null>(null)
 
   const matchMap = useMemo(() => new Map(matches?.map((m) => [m.id, m])), [matches])
 
@@ -57,6 +59,14 @@ export default function MeusPalpitesPage() {
   if (guessesLoading || matchesLoading) return <PageLoader />
 
   return (
+    <>
+    {viewGuessesMatch && (
+      <MatchGuessesModal
+        match={viewGuessesMatch}
+        isOpen={true}
+        onClose={() => setViewGuessesMatch(null)}
+      />
+    )}
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-bold text-dark">Meus Palpites</h1>
@@ -158,12 +168,22 @@ export default function MeusPalpitesPage() {
                   </div>
                 </div>
 
+                {/* Ver palpites dos participantes — após fechamento */}
+                {isGuessingClosed(match.matchDate, match.matchTime) && (
+                  <button
+                    onClick={() => setViewGuessesMatch(match)}
+                    className="mt-3 w-full py-1.5 rounded-xl text-xs font-medium text-mid-gray border border-light-gray hover:border-dark hover:text-dark transition-colors"
+                  >
+                    👥 Ver palpites dos participantes
+                  </button>
+                )}
               </Card>
             )
           })}
         </div>
       )}
     </div>
+    </>
   )
 }
 

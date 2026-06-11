@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
-import { sydleCall } from '@/lib/sydle/client'
+import { sydleCall, parseSearchFirst } from '@/lib/sydle/client'
 import { SYDLE_PACKAGE, SYDLE_CLASS, SYDLE_METHOD } from '@/lib/sydle/constants'
+import type { SydleResult } from '@/lib/types'
 
 const ADMIN_LOGINS = (process.env.ADMIN_LOGINS ?? '')
   .split(',')
@@ -28,11 +29,23 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: 'Placar obrigatório.' }, { status: 400 })
     }
 
+    // Busca o resultado atual para ter o game._id no _update
+    const existing = await sydleCall(SYDLE_PACKAGE, SYDLE_CLASS.results, SYDLE_METHOD.search, {
+      query: { term: { _id: id } }, size: 1,
+    }, token).then((r) => parseSearchFirst<SydleResult>(r))
+
+    if (!existing) return NextResponse.json({ error: 'Resultado não encontrado.' }, { status: 404 })
+
     const raw = await sydleCall(
       SYDLE_PACKAGE,
       SYDLE_CLASS.results,
-      SYDLE_METHOD.patch,
-      { _id: id, result1: Number(result1), result2: Number(result2) },
+      SYDLE_METHOD.update,
+      {
+        _id: id,
+        game: { _id: existing.game._id },
+        result1: Number(result1),
+        result2: Number(result2),
+      },
       token,
     )
 

@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import { MatchCard } from '@/components/features/MatchCard'
 import { GuessForm } from '@/components/features/GuessForm'
+import { MatchGuessesModal } from '@/components/features/MatchGuessesModal'
 import { PageLoader } from '@/components/ui/LoadingSpinner'
 import { Badge } from '@/components/ui/Badge'
 import { useMatches } from '@/hooks/useMatches'
@@ -18,6 +19,7 @@ export default function JogosPage() {
   const { data: myGuesses } = useMyGuesses()
   const [selectedPhase, setSelectedPhase] = useState<MatchPhase | 'all'>('all')
   const [guessingMatch, setGuessingMatch] = useState<Match | null>(null)
+  const [viewGuessesMatch, setViewGuessesMatch] = useState<Match | null>(null)
 
   const guessMap = useMemo(() => new Map(myGuesses?.map((g) => [g.matchId, g])), [myGuesses])
 
@@ -46,6 +48,7 @@ export default function JogosPage() {
   }, [filtered])
 
   if (isLoading) return <PageLoader />
+
   if (error) return (
     <div className="text-center py-16">
       <p className="text-4xl mb-3">❌</p>
@@ -55,6 +58,14 @@ export default function JogosPage() {
   )
 
   return (
+    <>
+    {viewGuessesMatch && (
+      <MatchGuessesModal
+        match={viewGuessesMatch}
+        isOpen={true}
+        onClose={() => setViewGuessesMatch(null)}
+      />
+    )}
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-bold text-dark">Jogos</h1>
@@ -124,6 +135,7 @@ export default function JogosPage() {
                         match={match}
                         guess={guess}
                         onGuess={() => setGuessingMatch(match)}
+                        onViewGuesses={() => setViewGuessesMatch(match)}
                       />
                     )}
                   </div>
@@ -134,6 +146,7 @@ export default function JogosPage() {
         ))
       )}
     </div>
+    </>
   )
 }
 

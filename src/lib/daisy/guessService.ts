@@ -26,8 +26,14 @@ export async function saveDaisyGuesses(
         await sydleCall(
           SYDLE_PACKAGE,
           SYDLE_CLASS.guesses,
-          SYDLE_METHOD.patch,
-          { _id: prev._id, result1, result2 },
+          SYDLE_METHOD.update,
+          {
+            _id: prev._id,
+            user: { _id: DAISY_USER_ID },
+            game: { _id: gameId },
+            result1,
+            result2,
+          },
           token,
         )
       } else {

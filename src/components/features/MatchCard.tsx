@@ -4,19 +4,21 @@ import { clsx } from 'clsx'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { CountryFlag } from './CountryFlag'
-import { formatMatchDate, PHASE_LABELS } from '@/lib/utils/dates'
+import { formatMatchDate, PHASE_LABELS, isGuessingClosed } from '@/lib/utils/dates'
 import type { Match, Guess } from '@/lib/types'
 
 interface MatchCardProps {
   match: Match
   guess?: Guess | null
   onGuess?: () => void
+  onViewGuesses?: () => void
   compact?: boolean
 }
 
-export function MatchCard({ match, guess, onGuess, compact }: MatchCardProps) {
+export function MatchCard({ match, guess, onGuess, onViewGuesses, compact }: MatchCardProps) {
   const isFinished = match.status === 'FINISHED'
   const hasResult = match.scoreCountry1 != null && match.scoreCountry2 != null
+  const closed = isGuessingClosed(match.matchDate, match.matchTime)
 
   return (
     <Card
@@ -106,6 +108,16 @@ export function MatchCard({ match, guess, onGuess, compact }: MatchCardProps) {
           className="mt-3 w-full py-2 rounded-xl text-sm font-semibold transition-colors bg-primary text-dark hover:bg-amber-400"
         >
           ⚽ Dar Palpite
+        </button>
+      )}
+
+      {/* Ver palpites dos participantes — visível apenas após fechamento */}
+      {onViewGuesses && closed && (
+        <button
+          onClick={onViewGuesses}
+          className="mt-2 w-full py-1.5 rounded-xl text-xs font-medium text-mid-gray border border-light-gray hover:border-dark hover:text-dark transition-colors"
+        >
+          👥 Ver palpites dos participantes
         </button>
       )}
     </Card>
