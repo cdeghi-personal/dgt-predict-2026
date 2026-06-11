@@ -91,29 +91,14 @@ export async function toggleDiaryActive(
   active: boolean,
   token: string,
 ): Promise<void> {
-  // SYDLE _patch não persiste campos simples de forma confiável — buscar objeto completo e usar _update
-  const raw = await sydleCall(
-    DAISY_PACKAGE,
-    SYDLE_CLASS.daisyDiary,
-    SYDLE_METHOD.search,
-    { query: { term: { _id: id } }, size: 1 },
-    token,
-  )
-  const items = parseSearch<SydleDaisyDiary>(raw)
-  const existing = items[0]
-  if (!existing) throw new Error(`Diário ${id} não encontrado.`)
-
+  // SYDLE _patch usa JSON Patch: { _id, _operationsList: [{ op, path, value }] }
   await sydleCall(
     DAISY_PACKAGE,
     SYDLE_CLASS.daisyDiary,
-    SYDLE_METHOD.update,
+    SYDLE_METHOD.patch,
     {
-      _id: existing._id,
-      tytle: existing.tytle ?? '',
-      subtytle: existing.subtytle ?? '',
-      content: existing.content ?? '',
-      Active: active,
-      ...(existing.date ? { date: existing.date } : {}),
+      _id: id,
+      _operationsList: [{ op: 'replace', path: '/Active', value: active }],
     },
     token,
   )
