@@ -67,12 +67,27 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
   const countryName = (id: string | undefined) =>
     (id ? countryMap.get(id)?.country : undefined) ?? '?'
 
-  // Últimos 5 jogos finalizados
+  const now = Date.now()
+
+  // Últimos 5 jogos com resultado registrado no sistema
   const finishedGames = recentGames.filter((g) => resultMap.has(g._id)).slice(0, 5)
   const matchContext = finishedGames.map((g) => {
     const r = resultMap.get(g._id)!
     return `${countryName(g.country1?._id)} ${r.result1} x ${r.result2} ${countryName(g.country2?._id)}`
-  }).join('\n') || 'Nenhum jogo finalizado ainda.'
+  }).join('\n') || 'Nenhum jogo com resultado no sistema ainda.'
+
+  // Jogos que já aconteceram mas o resultado ainda não foi lançado no SYDLE
+  const pendingResultGames = recentGames
+    .filter((g) => {
+      if (resultMap.has(g._id)) return false
+      const ts = typeof g.date === 'number' ? g.date : Number(g.date)
+      return !isNaN(ts) && ts < now
+    })
+    .slice(0, 5)
+  const pendingResultContext = pendingResultGames.length > 0
+    ? '\n\nJogos recentes sem resultado no sistema (já aconteceram — use as notícias para comentar):\n' +
+      pendingResultGames.map((g) => `${countryName(g.country1?._id)} vs ${countryName(g.country2?._id)}`).join('\n')
+    : ''
 
   // Top 10 ranking calculado inline
   const userAccum = new Map<string, { name: string; pts: number }>()
@@ -119,7 +134,8 @@ Retorne o conteúdo formatado em Markdown com seções usando ## para subtítulo
   const diaryUserMessage = [
     diaryPrompt,
     markdownInstruction,
-    `\n\nResultados recentes:\n${matchContext}`,
+    `\n\nResultados recentes (placar registrado no sistema):\n${matchContext}`,
+    pendingResultContext,
     `\n\nPróximos jogos (24h):\n${upcomingContext}`,
     `\n\nTop 10 ranking:\n${rankingContext}`,
     newsContext,
