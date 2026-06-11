@@ -116,7 +116,7 @@ function TeamRow({ standing: s, position }: { standing: TeamStanding; position: 
       <td className="px-2 py-3 text-center text-mid-gray">{s.SG > 0 ? `+${s.SG}` : s.SG}</td>
       <td className="px-2 py-3 text-center text-mid-gray">{s.pct}</td>
       <td className="px-4 py-3">
-        <LastGamesDots results={s.lastGames} played={s.J} />
+        <LastGamesDots results={s.lastGames} />
       </td>
     </tr>
   )
@@ -133,7 +133,7 @@ function MobileTeamRow({ standing: s, position }: { standing: TeamStanding; posi
         <span className="font-bold text-dark w-6 text-right">{s.PG}</span>
         <span className="text-mid-gray w-4 text-right">{s.J}</span>
         <span className="text-mid-gray w-4 text-right">{s.SG > 0 ? `+${s.SG}` : s.SG}</span>
-        <LastGamesDots results={s.lastGames} played={s.J} compact />
+        <LastGamesDots results={s.lastGames} compact />
       </div>
     </div>
   )
@@ -141,14 +141,12 @@ function MobileTeamRow({ standing: s, position }: { standing: TeamStanding; posi
 
 function LastGamesDots({
   results,
-  played,
   compact = false,
 }: {
   results: ('W' | 'D' | 'L')[]
-  played: number
   compact?: boolean
 }) {
-  const total = compact ? 3 : 5
+  const total = 3
   const dots: ('W' | 'D' | 'L' | null)[] = [
     ...Array(Math.max(0, total - results.length)).fill(null),
     ...results.slice(-total),

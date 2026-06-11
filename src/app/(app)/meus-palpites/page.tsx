@@ -120,6 +120,15 @@ export default function MeusPalpitesPage() {
                       </span>
                     )}
                     <Badge color={STATUS_COLORS[status]}>{STATUS_LABELS[status]}</Badge>
+                    {status === 'aberto' && (
+                      <button
+                        onClick={() => setEditingGuess({ guess, match })}
+                        className="text-mid-gray hover:text-dark transition-colors p-1 rounded-lg hover:bg-gray-100"
+                        title="Alterar palpite"
+                      >
+                        ✏️
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -131,10 +140,10 @@ export default function MeusPalpitesPage() {
                   </div>
 
                   <div className="text-center">
-                    <div className="flex items-center gap-1">
-                      <span className="text-base font-bold text-dark">{guess.result1}</span>
-                      <span className="text-mid-gray text-sm">×</span>
-                      <span className="text-base font-bold text-dark">{guess.result2}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl font-bold text-dark">{guess.result1}</span>
+                      <span className="text-mid-gray text-base font-semibold">×</span>
+                      <span className="text-2xl font-bold text-dark">{guess.result2}</span>
                     </div>
                     {hasResult && (
                       <p className="text-xs text-mid-gray">
@@ -149,15 +158,6 @@ export default function MeusPalpitesPage() {
                   </div>
                 </div>
 
-                {/* Editar — só se ainda aberto */}
-                {status === 'aberto' && (
-                  <button
-                    onClick={() => setEditingGuess({ guess, match })}
-                    className="mt-3 w-full text-xs text-mid-gray hover:text-dark py-1.5 rounded-xl hover:bg-background transition-colors"
-                  >
-                    ✏️ Alterar palpite
-                  </button>
-                )}
               </Card>
             )
           })}

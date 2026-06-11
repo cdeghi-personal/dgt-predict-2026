@@ -91,17 +91,23 @@ export function MatchCard({ match, guess, onGuess, compact }: MatchCardProps) {
 
       {/* CTA palpitar */}
       {onGuess && (
-        <button
-          onClick={onGuess}
-          className={clsx(
-            'mt-3 w-full py-2 rounded-xl text-sm font-semibold transition-colors',
-            guess
-              ? 'bg-background text-mid-gray hover:bg-gray-100'
-              : 'bg-primary text-dark hover:bg-amber-400',
-          )}
-        >
-          {guess ? '✏️ Alterar Palpite' : '⚽ Dar Palpite'}
-        </button>
+        guess ? (
+          <div className="mt-2 flex justify-center">
+            <button
+              onClick={onGuess}
+              className="text-xs text-mid-gray hover:text-dark flex items-center gap-1 px-3 py-1 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              ✏️ Alterar Palpite
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={onGuess}
+            className="mt-3 w-full py-2 rounded-xl text-sm font-semibold transition-colors bg-primary text-dark hover:bg-amber-400"
+          >
+            ⚽ Dar Palpite
+          </button>
+        )
       )}
     </Card>
   )
