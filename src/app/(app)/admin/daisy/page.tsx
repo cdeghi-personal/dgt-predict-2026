@@ -11,6 +11,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import type { DaisyDiary } from '@/lib/types'
+import type { DaisyAITestResult, GenerateDiaryResult } from '@/lib/daisy/types'
 
 function useAdminDiaries() {
   const { authHeader } = useAuth()
@@ -34,7 +35,7 @@ function formatDate(iso: string) {
 }
 
 export default function AdminDaisyPage() {
-  const { user } = useAuth()
+  const { user, authHeader } = useAuth()
   const router = useRouter()
   const qc = useQueryClient()
 
@@ -43,38 +44,60 @@ export default function AdminDaisyPage() {
   }, [user, router])
 
   const { data: diaries, isLoading } = useAdminDiaries()
-  const [newsText, setNewsText] = useState('')
-  const [generateError, setGenerateError] = useState<string | null>(null)
-  const [successMsg, setSuccessMsg] = useState<string | null>(null)
 
-  const { authHeader } = useAuth()
+  // ── Card 1: Diagnóstico ─────────────────────────────────────────────────────
+  const [testResult, setTestResult] = useState<DaisyAITestResult | null>(null)
+
+  const testAI = useMutation({
+    mutationFn: async () => {
+      setTestResult(null)
+      const res = await fetch('/api/admin/daisy/test-ai', {
+        method: 'POST',
+        headers: authHeader(),
+      })
+      const data = await res.json() as DaisyAITestResult
+      return data
+    },
+    onSuccess: (data) => setTestResult(data),
+    onError: (err) => {
+      setTestResult({
+        success: false,
+        provider: 'OpenAI',
+        model: 'gpt-4.1',
+        error: err instanceof Error ? err.message : 'Erro desconhecido.',
+      })
+    },
+  })
+
+  // ── Card 2: Geração ─────────────────────────────────────────────────────────
+  const [generateResult, setGenerateResult] = useState<GenerateDiaryResult | null>(null)
+  const [generateError, setGenerateError] = useState<string | null>(null)
 
   const generate = useMutation({
     mutationFn: async () => {
-      const res = await fetch('/api/admin/daisy', {
+      setGenerateResult(null)
+      setGenerateError(null)
+      const res = await fetch('/api/admin/daisy/generate-diary', {
         method: 'POST',
         headers: authHeader(),
-        body: JSON.stringify({ newsText: newsText.trim() || undefined }),
       })
       if (!res.ok) {
         const d = await res.json()
         throw new Error(d.error ?? 'Erro ao gerar diário.')
       }
-      return res.json() as Promise<DaisyDiary>
+      return res.json() as Promise<GenerateDiaryResult>
     },
-    onSuccess: (diary) => {
+    onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['admin-daisy-diaries'] })
       qc.invalidateQueries({ queryKey: ['daisy-diaries'] })
-      setNewsText('')
-      setGenerateError(null)
-      setSuccessMsg(`Diário gerado: "${diary.title}"`)
-      setTimeout(() => setSuccessMsg(null), 5000)
+      setGenerateResult(data)
     },
     onError: (err) => {
-      setGenerateError(err instanceof Error ? err.message : 'Erro.')
+      setGenerateError(err instanceof Error ? err.message : 'Erro ao gerar diário.')
     },
   })
 
+  // ── Toggle ativo/inativo ────────────────────────────────────────────────────
   const toggle = useMutation({
     mutationFn: async ({ id, active }: { id: string; active: boolean }) => {
       const res = await fetch('/api/admin/daisy', {
@@ -100,31 +123,66 @@ export default function AdminDaisyPage() {
         <p className="text-sm text-mid-gray">{diaries?.length ?? 0} entradas no diário</p>
       </div>
 
-      {/* Painel de geração */}
+      {/* ── Card 1: Diagnóstico da Daisy ──────────────────────────────────────── */}
       <Card className="p-4 space-y-3">
-        <h2 className="text-sm font-bold text-dark">Gerar Nova Entrada</h2>
         <div>
-          <label className="text-xs font-medium text-mid-gray block mb-1">
-            Contexto de notícias (opcional)
-          </label>
-          <textarea
-            value={newsText}
-            onChange={(e) => setNewsText(e.target.value)}
-            placeholder="Cole aqui notícias do dia sobre futebol para enriquecer o diário..."
-            rows={4}
-            className="w-full rounded-xl border border-light-gray px-3 py-2 text-sm text-dark placeholder:text-mid-gray focus:outline-none focus:border-primary resize-none"
-          />
-          <p className="text-xs text-mid-gray mt-1">
-            Deixe vazio para gerar apenas com dados de jogos e ranking.
+          <h2 className="text-sm font-bold text-dark">🔌 Diagnóstico da Daisy</h2>
+          <p className="text-xs text-mid-gray mt-0.5">
+            Verifica se a Daisy consegue se comunicar com a IA (OpenAI gpt-4.1).
           </p>
         </div>
 
-        {generateError && (
-          <p className="text-xs text-red-500 font-medium">{generateError}</p>
+        <Button
+          variant="secondary"
+          fullWidth
+          loading={testAI.isPending}
+          onClick={() => testAI.mutate()}
+        >
+          Testar Conexão com IA
+        </Button>
+
+        {testAI.isPending && (
+          <p className="text-xs text-mid-gray text-center">
+            Daisy está verificando sua conexão com a IA...
+          </p>
         )}
-        {successMsg && (
-          <p className="text-xs text-green-600 font-medium">✅ {successMsg}</p>
+
+        {testResult && (
+          <div className={`rounded-xl p-3 border text-sm ${testResult.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+            {testResult.success ? (
+              <>
+                <p className="font-bold text-green-700 mb-1">
+                  ✅ Conexão com IA funcionando
+                </p>
+                <p className="text-xs text-green-600 mb-2">
+                  Provedor: {testResult.provider} · Modelo: {testResult.model}
+                </p>
+                {testResult.message && (
+                  <p className="text-xs text-dark italic border-t border-green-200 pt-2">
+                    &ldquo;{testResult.message}&rdquo;
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="font-bold text-red-700 mb-1">
+                  ❌ Falha na conexão com IA
+                </p>
+                <p className="text-xs text-red-600">{testResult.error}</p>
+              </>
+            )}
+          </div>
         )}
+      </Card>
+
+      {/* ── Card 2: Processo diário da Daisy ─────────────────────────────────── */}
+      <Card className="p-4 space-y-3">
+        <div>
+          <h2 className="text-sm font-bold text-dark">📓 Processo diário da Daisy</h2>
+          <p className="text-xs text-mid-gray mt-0.5">
+            Busca notícias, analisa jogos e ranking, e gera uma nova entrada do diário.
+          </p>
+        </div>
 
         <Button
           variant="primary"
@@ -132,11 +190,51 @@ export default function AdminDaisyPage() {
           loading={generate.isPending}
           onClick={() => generate.mutate()}
         >
-          🤖 Gerar Diário com IA
+          🤖 Gerar Diário da Daisy
         </Button>
+
+        {generate.isPending && (
+          <p className="text-xs text-mid-gray text-center">
+            Daisy está lendo as notícias da Copa e preparando o diário...
+          </p>
+        )}
+
+        {generateError && (
+          <div className="rounded-xl p-3 border bg-red-50 border-red-200">
+            <p className="text-xs font-bold text-red-700 mb-1">❌ Erro na geração</p>
+            <p className="text-xs text-red-600">{generateError}</p>
+          </div>
+        )}
+
+        {generateResult && (
+          <div className="rounded-xl p-3 border bg-green-50 border-green-200 space-y-2">
+            <p className="font-bold text-green-700 text-sm">✅ Diário gerado com sucesso!</p>
+
+            <div className="text-xs text-dark space-y-0.5">
+              <p><span className="font-semibold">Título:</span> {generateResult.diary.title}</p>
+              {generateResult.diary.subtitle && (
+                <p><span className="font-semibold">Subtítulo:</span> {generateResult.diary.subtitle}</p>
+              )}
+              <p><span className="font-semibold">Criado em:</span> {formatDate(generateResult.diary.createdAt)}</p>
+            </div>
+
+            <div className="text-xs text-mid-gray border-t border-green-200 pt-2 space-y-0.5">
+              <p>
+                🌐 Fontes lidas:{' '}
+                <span className="text-green-700 font-semibold">{generateResult.newsResult.successUrls.length}</span>
+                {generateResult.newsResult.errorUrls.length > 0 && (
+                  <span className="text-red-500 ml-1">
+                    · {generateResult.newsResult.errorUrls.length} com erro
+                  </span>
+                )}
+              </p>
+              <p>⏱ Gerado em: {formatDate(generateResult.generatedAt)}</p>
+            </div>
+          </div>
+        )}
       </Card>
 
-      {/* Lista de entradas */}
+      {/* ── Lista de entradas ──────────────────────────────────────────────── */}
       {diaries && diaries.length > 0 && (
         <section>
           <h2 className="text-xs font-bold text-mid-gray uppercase tracking-wide mb-3">

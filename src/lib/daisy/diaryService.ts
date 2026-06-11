@@ -1,22 +1,16 @@
 // Server-side only — orquestra geração do Diário da Daisy
 import { sydleCall, parseSearch } from '@/lib/sydle/client'
 import { SYDLE_PACKAGE, SYDLE_CLASS, SYDLE_METHOD } from '@/lib/sydle/constants'
-import { callClaude, parseJsonFromText } from './aiClient'
+import { callOpenAI, parseJsonFromText } from './aiClient'
 import { getAllPrompts } from './promptRepository'
 import { createDiary } from './diaryRepository'
 import { saveDaisyGuesses } from './guessService'
-import { summarizeNewsUrls, buildNewsContext } from './newsService'
+import { fetchAndSummarizeNews, buildNewsContext } from './newsService'
 import { DAISY_PROMPT_IDENTIFIERS } from './constants'
 import { calculatePoints } from '@/lib/utils/scoring'
 import { mapGuess } from '@/lib/mappers'
 import type { SydleGame, SydleResult, SydleGuess } from '@/lib/types'
-import type { DaisyDiary } from '@/lib/types'
-
-interface GenerateDiaryOptions {
-  newsUrls?: string[]
-  newsText?: string
-  token: string
-}
+import type { GenerateDiaryResult, NewsResult } from './types'
 
 interface DiaryAIResponse {
   title: string
@@ -30,10 +24,10 @@ interface GuessAIResponse {
   result2: number
 }
 
-export async function generateDailyDiary(opts: GenerateDiaryOptions): Promise<DaisyDiary> {
-  const { token } = opts
+export async function generateDailyDiary(token: string): Promise<GenerateDiaryResult> {
+  const today = new Date()
+  const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}T00:00:00Z`
 
-  // Load prompts and context data in parallel
   const [prompts, gamesRaw, resultsRaw, guessesRaw, upcomingRaw] = await Promise.all([
     getAllPrompts(token),
     sydleCall(SYDLE_PACKAGE, SYDLE_CLASS.games, SYDLE_METHOD.search,
@@ -48,10 +42,10 @@ export async function generateDailyDiary(opts: GenerateDiaryOptions): Promise<Da
   ])
 
   const promptMap = new Map(prompts.map((p) => [p.identifier, p]))
-  const personaPrompt  = promptMap.get(DAISY_PROMPT_IDENTIFIERS.persona)?.Prompt    ?? ''
-  const diaryPrompt    = promptMap.get(DAISY_PROMPT_IDENTIFIERS.diary)?.Prompt      ?? ''
-  const guessesPrompt  = promptMap.get(DAISY_PROMPT_IDENTIFIERS.guesses)?.Prompt    ?? ''
-  const newsSummaryPrompt = promptMap.get(DAISY_PROMPT_IDENTIFIERS.newsSummary)?.Prompt ?? ''
+  const personaPrompt     = promptMap.get(DAISY_PROMPT_IDENTIFIERS.persona)?.prompt     ?? ''
+  const diaryPrompt       = promptMap.get(DAISY_PROMPT_IDENTIFIERS.diary)?.prompt       ?? ''
+  const guessesPrompt     = promptMap.get(DAISY_PROMPT_IDENTIFIERS.guesses)?.prompt     ?? ''
+  const newsSummaryPrompt = promptMap.get(DAISY_PROMPT_IDENTIFIERS.newsSummary)?.prompt ?? ''
 
   const recentGames   = parseSearch<SydleGame>(gamesRaw)
   const recentResults = parseSearch<SydleResult>(resultsRaw)
@@ -60,14 +54,14 @@ export async function generateDailyDiary(opts: GenerateDiaryOptions): Promise<Da
 
   const resultMap = new Map(recentResults.map((r) => [r.game?._id, r]))
 
-  // Build match context (last 5 finished)
+  // Últimos 5 jogos finalizados
   const finishedGames = recentGames.filter((g) => resultMap.has(g._id)).slice(0, 5)
   const matchContext = finishedGames.map((g) => {
     const r = resultMap.get(g._id)!
     return `${g.country1?.name ?? '?'} ${r.result1} x ${r.result2} ${g.country2?.name ?? '?'}`
   }).join('\n') || 'Nenhum jogo finalizado ainda.'
 
-  // Build ranking context from guesses
+  // Top 10 ranking calculado inline
   const userAccum = new Map<string, { name: string; pts: number }>()
   for (const guess of allGuesses) {
     const result = resultMap.get(guess.matchId)
@@ -84,25 +78,26 @@ export async function generateDailyDiary(opts: GenerateDiaryOptions): Promise<Da
     ? topUsers.map(([, u], i) => `${i + 1}. ${u.name} — ${u.pts} pts`).join('\n')
     : 'Ranking ainda sem pontuação.'
 
-  // News context
-  let newsContext = ''
-  if (opts.newsText?.trim()) {
-    newsContext = buildNewsContext(opts.newsText)
-  } else if (opts.newsUrls?.length) {
-    const summary = await summarizeNewsUrls(opts.newsUrls, newsSummaryPrompt, personaPrompt)
-    newsContext = buildNewsContext(summary)
-  }
+  // Próximos jogos
+  const upcomingContext = upcomingGames.length
+    ? upcomingGames.map((g) => `${g.country1?.name ?? '?'} vs ${g.country2?.name ?? '?'}`).join('\n')
+    : 'Nenhum jogo nas próximas 24h.'
 
-  // Generate diary via AI
+  // Notícias das 5 fontes externas
+  const newsResult: NewsResult = await fetchAndSummarizeNews(newsSummaryPrompt, personaPrompt)
+  const newsContext = buildNewsContext(newsResult.summary)
+
+  // Gera diário via OpenAI
   const diaryUserMessage = [
     diaryPrompt,
-    `\n\nJogos recentes:\n${matchContext}`,
+    `\n\nResultados recentes:\n${matchContext}`,
+    `\n\nPróximos jogos (24h):\n${upcomingContext}`,
     `\n\nTop 10 ranking:\n${rankingContext}`,
     newsContext,
     '\n\nRetorne APENAS JSON válido com os campos: title, subtitle, content.',
   ].join('')
 
-  const diaryRaw = await callClaude(personaPrompt, diaryUserMessage, { maxTokens: 2048, temperature: 0.8 })
+  const diaryRaw = await callOpenAI(personaPrompt, diaryUserMessage, { maxTokens: 2048, temperature: 0.8 })
   const diaryJson = parseJsonFromText<DiaryAIResponse>(diaryRaw)
 
   const diary = await createDiary(
@@ -110,16 +105,17 @@ export async function generateDailyDiary(opts: GenerateDiaryOptions): Promise<Da
     sanitize(diaryJson.subtitle ?? ''),
     sanitize(diaryJson.content ?? ''),
     token,
+    dateStr,
   )
 
-  // Generate guesses for upcoming games (errors are non-fatal)
+  // Palpites para os próximos jogos (falha não é fatal)
   if (upcomingGames.length > 0 && guessesPrompt) {
     try {
       const gamesCtx = upcomingGames.map((g) =>
         `gameId: ${g._id}, ${g.country1?.name ?? '?'} vs ${g.country2?.name ?? '?'}`
       ).join('\n')
 
-      const guessRaw = await callClaude(
+      const guessRaw = await callOpenAI(
         personaPrompt,
         `${guessesPrompt}\n\nJogos para as próximas 24h:\n${gamesCtx}\n\nRetorne APENAS JSON válido: array de objetos com gameId, result1 e result2.`,
         { maxTokens: 512, temperature: 0.7 },
@@ -141,7 +137,11 @@ export async function generateDailyDiary(opts: GenerateDiaryOptions): Promise<Da
     }
   }
 
-  return diary
+  return {
+    diary,
+    newsResult,
+    generatedAt: new Date().toISOString(),
+  }
 }
 
 function sanitize(text: string): string {

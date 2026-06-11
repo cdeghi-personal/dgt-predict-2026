@@ -15,6 +15,7 @@ function mapDiary(raw: SydleDaisyDiary): DaisyDiary {
     subtitle: raw.subtytle ?? '',
     content: raw.content ?? '',
     active: raw.Active ?? false,
+    date: raw.date,
     createdAt: toDate(raw._creationDate),
     updatedAt: raw._lastUpdateDate ? toDate(raw._lastUpdateDate) : undefined,
   }
@@ -67,6 +68,7 @@ export async function createDiary(
   subtitle: string,
   content: string,
   token: string,
+  date?: string,
 ): Promise<DaisyDiary> {
   const raw = await sydleCall<SydleDaisyDiary>(
     DAISY_PACKAGE,
@@ -77,6 +79,7 @@ export async function createDiary(
       subtytle: subtitle,
       content,
       Active: true,
+      ...(date ? { date } : {}),
     },
     token,
   )

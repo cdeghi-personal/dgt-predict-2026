@@ -1,36 +1,63 @@
-// Server-side only — busca e resume notícias externas para o diário
-import { callClaude, parseJsonFromText } from './aiClient'
+// Server-side only — busca e resume notícias de fontes externas
+import { callOpenAI } from './aiClient'
+import type { NewsResult } from './types'
 
-export async function summarizeNewsUrls(
-  urls: string[],
+const NEWS_SOURCES = [
+  'https://ge.globo.com/futebol/copa-do-mundo/',
+  'https://www.espn.com.br/futebol/',
+  'https://www.uol.com.br/esporte/futebol/',
+  'https://www.cnnbrasil.com.br/esportes/',
+  'https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026',
+]
+
+export async function fetchAndSummarizeNews(
   newsSummaryPrompt: string,
   personaPrompt: string,
-): Promise<string> {
-  if (urls.length === 0) return ''
-
-  const contents = await Promise.allSettled(
-    urls.map((url) =>
-      fetch(url, { headers: { 'User-Agent': 'DGTPredict/1.0' }, signal: AbortSignal.timeout(8000) })
+): Promise<NewsResult> {
+  const results = await Promise.allSettled(
+    NEWS_SOURCES.map((url) =>
+      fetch(url, {
+        headers: { 'User-Agent': 'DGTPredict/1.0' },
+        signal: AbortSignal.timeout(8000),
+      })
         .then((r) => r.text())
-        .then((t) => t.slice(0, 3000)), // limit per URL
+        .then((t) => ({ url, text: t.slice(0, 3000) })),
     ),
   )
 
-  const texts = contents
-    .filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled')
-    .map((r, i) => `URL ${i + 1}:\n${r.value}`)
-    .join('\n\n---\n\n')
+  const successUrls: string[] = []
+  const errorUrls: string[] = []
+  const textParts: string[] = []
 
-  if (!texts) return ''
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i]
+    const url = NEWS_SOURCES[i]
+    if (r.status === 'fulfilled') {
+      successUrls.push(url)
+      textParts.push(`Fonte: ${url}\n${r.value.text}`)
+    } else {
+      errorUrls.push(url)
+    }
+  }
 
-  try {
-    const result = await callClaude(personaPrompt, `${newsSummaryPrompt}\n\nConteúdos:\n${texts}`, {
-      maxTokens: 512,
-      temperature: 0.3,
-    })
-    return result
-  } catch {
-    return ''
+  let summary = ''
+  if (textParts.length > 0 && newsSummaryPrompt) {
+    try {
+      summary = await callOpenAI(
+        personaPrompt,
+        `${newsSummaryPrompt}\n\nConteúdos das fontes:\n\n${textParts.join('\n\n---\n\n')}`,
+        { maxTokens: 512, temperature: 0.3 },
+      )
+    } catch {
+      summary = ''
+    }
+  }
+
+  return {
+    items: successUrls.map((url) => ({ url, title: '', description: '' })),
+    successUrls,
+    errorUrls,
+    summary,
   }
 }
 

@@ -190,7 +190,9 @@ src/
       diary/route.ts                    # GET → lista entradas ativas (autenticado)
       diary/[id]/route.ts               # GET → entrada por ID
     admin/
-      daisy/route.ts                    # GET (todos) / POST (gerar) / PATCH (toggle ativo) — admin
+      daisy/route.ts                    # GET (todos) / PATCH (toggle ativo) — admin
+      daisy/test-ai/route.ts            # POST — testa conexão OpenAI, retorna DaisyAITestResult
+      daisy/generate-diary/route.ts     # POST — gera diário completo, retorna GenerateDiaryResult
   components/
     features/
       MatchCard.tsx                     # Card de jogo (com/sem palpite)
@@ -218,11 +220,11 @@ src/
       scoring.ts                        # calculatePoints, OUTCOME_COLORS
     daisy/
       constants.ts                      # DAISY_USER_ID, DAISY_USER_NAME, DAISY_PROMPT_IDENTIFIERS
-      aiClient.ts                       # callClaude() via Anthropic API (server-side only)
+      aiClient.ts                       # callOpenAI() via OpenAI API (server-side only)
       promptRepository.ts               # getAllPrompts, getPromptByIdentifier — SYDLE daisyPrompt
       diaryRepository.ts                # getActiveDiaries, createDiary, toggleDiaryActive — SYDLE daisyDiary
       guessService.ts                   # saveDaisyGuesses — cria palpites no SYDLE como usuário Daisy
-      newsService.ts                    # summarizeNewsUrls, buildNewsContext
+      newsService.ts                    # fetchAndSummarizeNews (5 fontes fixas), buildNewsContext
       diaryService.ts                   # generateDailyDiary — orquestra geração completa
   contexts/
     AuthContext.tsx                     # useAuth, login/logout
@@ -265,14 +267,16 @@ PHASE_LABELS = {
 
 ## Diário da Daisy — Visão Geral
 
-Funcionalidade de IA que gera entradas diárias de diário com análises da Copa, palpites automáticos e ranking, usando a API Anthropic (Claude).
+Funcionalidade de IA que gera entradas diárias de diário com análises da Copa, palpites automáticos e ranking, usando a API OpenAI (gpt-4.1).
 
 ### Variáveis de ambiente adicionais
 
 ```env
-ANTHROPIC_API_KEY=sk-ant-...       # Chave da API Anthropic (obrigatória para geração)
+OPENAI_API_KEY=sk-...              # Chave da API OpenAI (obrigatória para geração — somente server-side)
 DAISY_PACKAGE=predict2026          # Pacote SYDLE das classes Daisy (padrão: predict2026)
 ```
+
+**Segurança:** `OPENAI_API_KEY` nunca deve ser exposta no client. Usar sempre `process.env.OPENAI_API_KEY` em API routes e libs server-side. Nunca usar `NEXT_PUBLIC_OPENAI_API_KEY`.
 
 ### Classes SYDLE — Daisy
 
@@ -324,13 +328,22 @@ Os palpites da Daisy são salvos na classe `predict2026.guesses` com `user._id =
 6. Diário salvo em `daisyDiary` via `_create`; palpites salvos em `predict2026.guesses`
 7. Admin pode desativar entradas via toggle (PATCH `/api/admin/daisy`)
 
+### Rotas administrativas
+
+| Rota | Método | Descrição |
+|---|---|---|
+| `/api/admin/daisy` | GET | Lista todos os diários (inclusive inativos) |
+| `/api/admin/daisy` | PATCH | Alterna ativo/inativo de uma entrada |
+| `/api/admin/daisy/test-ai` | POST | Testa conexão com OpenAI (sem criar diário) — retorna `DaisyAITestResult` |
+| `/api/admin/daisy/generate-diary` | POST | Gera nova entrada completa — retorna `GenerateDiaryResult` |
+
 ### aiClient — uso correto
 
 ```ts
 // SOMENTE server-side (API routes, server components, lib/daisy/)
-import { callClaude, parseJsonFromText } from '@/lib/daisy/aiClient'
+import { callOpenAI, parseJsonFromText } from '@/lib/daisy/aiClient'
 
-const raw = await callClaude(systemPrompt, userMessage, { maxTokens: 2048, temperature: 0.8 })
+const raw = await callOpenAI(systemPrompt, userMessage, { maxTokens: 2048, temperature: 0.8, model: 'gpt-4.1' })
 const data = parseJsonFromText<{ title: string }>(raw)
 ```
 
@@ -338,8 +351,9 @@ const data = parseJsonFromText<{ title: string }>(raw)
 
 ### Segurança
 
-- `ANTHROPIC_API_KEY` nunca exposta ao client — toda chamada à IA é server-side
-- Rotas `/api/admin/daisy` validam `user.isAdmin` via `X-User-Login` header
+- `OPENAI_API_KEY` nunca exposta ao client — toda chamada à IA é server-side via `process.env.OPENAI_API_KEY`
+- Nunca usar `NEXT_PUBLIC_OPENAI_API_KEY`
+- Rotas `/api/admin/daisy/*` validam admin via `X-User-Login` header
 - Conteúdo gerado é sanitizado (strip HTML/scripts) antes de salvar
 - Página `/admin/daisy` redireciona para `/dashboard` se `!user.isAdmin`
 
@@ -368,4 +382,4 @@ npm run dev
 - Branch `main` → deploy automático
 - Variáveis de ambiente configuradas no dashboard do Vercel
 - Org de produção: `dgt-consultoria`
-- **Adicionar ao Vercel**: `ANTHROPIC_API_KEY` e `DAISY_PACKAGE` (se necessário)
+- **Adicionar ao Vercel**: `OPENAI_API_KEY` e `DAISY_PACKAGE` (se necessário)

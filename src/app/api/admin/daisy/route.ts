@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import { generateDailyDiary } from '@/lib/daisy/diaryService'
 import { getAllDiaries, toggleDiaryActive } from '@/lib/daisy/diaryRepository'
 
 const ADMIN_LOGINS = (process.env.ADMIN_LOGINS ?? '')
@@ -31,30 +30,6 @@ export async function GET(req: Request) {
   } catch (err) {
     console.error('[admin/daisy GET]', err)
     return NextResponse.json({ error: 'Erro ao buscar diários.' }, { status: 500 })
-  }
-}
-
-// POST /api/admin/daisy — gera novo diário via IA
-// Body: { newsText?: string, newsUrls?: string[] }
-export async function POST(req: Request) {
-  const token = getToken(req)
-  if (!token) return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 })
-  if (!isAdmin(getLogin(req))) return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 })
-
-  try {
-    const body = await req.json().catch(() => ({})) as { newsText?: string; newsUrls?: string[] }
-
-    const diary = await generateDailyDiary({
-      newsText: body.newsText,
-      newsUrls: body.newsUrls,
-      token,
-    })
-
-    return NextResponse.json(diary, { status: 201 })
-  } catch (err) {
-    console.error('[admin/daisy POST]', err)
-    const msg = err instanceof Error ? err.message : 'Erro ao gerar diário.'
-    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
 

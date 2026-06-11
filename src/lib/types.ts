@@ -207,6 +207,7 @@ export interface SydleDaisyDiary {
   subtytle: string
   content: string
   Active: boolean
+  date?: string              // "YYYY-MM-DDT00:00:00Z" — data de referência do diário
   _creationDate?: number | string
   _lastUpdateDate?: number | string
 }
@@ -217,6 +218,7 @@ export interface DaisyDiary {
   subtitle: string
   content: string
   active: boolean
+  date?: string              // "YYYY-MM-DDT00:00:00Z"
   createdAt: string
   updatedAt?: string
 }
