@@ -149,6 +149,18 @@ export interface Guess {
   points: number | null  // calculado em runtime via scoring.ts; não está no SYDLE
 }
 
+// ─── Guess Distribution ───────────────────────────────────────────────────────
+
+export interface MatchGuessDistribution {
+  totalGuesses: number
+  country1Wins: number
+  draws: number
+  country2Wins: number
+  country1WinPercentage: number
+  drawPercentage: number
+  country2WinPercentage: number
+}
+
 // ─── Ranking ──────────────────────────────────────────────────────────────────
 
 export interface RankingEntry {

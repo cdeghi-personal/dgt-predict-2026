@@ -7,7 +7,7 @@ import { CountryFlag } from '@/components/features/CountryFlag'
 import { PageLoader } from '@/components/ui/LoadingSpinner'
 import { GuessForm } from '@/components/features/GuessForm'
 import { MatchGuessesModal } from '@/components/features/MatchGuessesModal'
-import { useMyGuesses } from '@/hooks/useGuesses'
+import { useMyGuesses, useMatchDistributions } from '@/hooks/useGuesses'
 import { useMatches } from '@/hooks/useMatches'
 import { isGuessingClosed, formatMatchDate, PHASE_LABELS } from '@/lib/utils/dates'
 import { OUTCOME_COLORS, calculatePoints } from '@/lib/utils/scoring'
@@ -50,6 +50,12 @@ export default function MeusPalpitesPage() {
       .filter((e): e is { guess: Guess; match: Match } => !!e.match)
       .sort((a, b) => a.match.matchDate.localeCompare(b.match.matchDate))
   }, [guesses, matches, matchMap])
+
+  const closedMatchIds = useMemo(
+    () => enriched.filter(({ match: m }) => isGuessingClosed(m.matchDate, m.matchTime)).map(({ match: m }) => m.id),
+    [enriched],
+  )
+  const { data: distributions } = useMatchDistributions(closedMatchIds)
 
   // Totais — calculados contra o resultado real do jogo (guess.points é sempre null)
   const { totalPoints, totalExact, totalCorrect } = useMemo(() => {
@@ -175,6 +181,28 @@ export default function MeusPalpitesPage() {
                     <CountryFlag flag={match.country2.flag} name={match.country2.name} size="sm" />
                   </div>
                 </div>
+
+                {/* Distribuição dos palpites — após fechamento */}
+                {(() => {
+                  const dist = isGuessingClosed(match.matchDate, match.matchTime)
+                    ? (distributions?.[match.id] ?? null)
+                    : null
+                  if (!dist || dist.totalGuesses === 0) return null
+                  const maxPct = Math.max(dist.country1WinPercentage, dist.drawPercentage, dist.country2WinPercentage)
+                  return (
+                    <div className="flex items-center justify-between mt-3 text-xs">
+                      <span className={dist.country1WinPercentage === maxPct ? 'text-primary font-bold' : 'text-mid-gray font-semibold'}>
+                        {dist.country1WinPercentage}%
+                      </span>
+                      <span className={dist.drawPercentage === maxPct ? 'text-primary font-bold' : 'text-mid-gray font-semibold'}>
+                        {dist.drawPercentage}%
+                      </span>
+                      <span className={dist.country2WinPercentage === maxPct ? 'text-primary font-bold' : 'text-mid-gray font-semibold'}>
+                        {dist.country2WinPercentage}%
+                      </span>
+                    </div>
+                  )
+                })()}
 
                 {/* Ver palpites dos participantes — após fechamento */}
                 {isGuessingClosed(match.matchDate, match.matchTime) && (

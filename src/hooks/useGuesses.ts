@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/AuthContext'
-import type { Guess } from '@/lib/types'
+import type { Guess, MatchGuessDistribution } from '@/lib/types'
 
 async function fetchGuesses(
   headers: Record<string, string>,
@@ -36,6 +36,27 @@ export function useMatchGuesses(matchId: string) {
     queryFn: () => fetchGuesses(authHeader(), { matchId }),
     enabled: isAuthenticated && !!matchId,
     staleTime: 30_000,
+  })
+}
+
+export function useMatchDistributions(matchIds: string[]) {
+  const { authHeader, isAuthenticated } = useAuth()
+  const key = matchIds.slice().sort().join(',')
+
+  return useQuery({
+    queryKey: ['match-distributions', key],
+    queryFn: async (): Promise<Record<string, MatchGuessDistribution>> => {
+      if (!matchIds.length) return {}
+      const res = await fetch('/api/matches/distributions', {
+        method: 'POST',
+        headers: { ...authHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matchIds }),
+      })
+      if (!res.ok) return {}
+      return res.json()
+    },
+    enabled: isAuthenticated && matchIds.length > 0,
+    staleTime: 5 * 60_000,
   })
 }
 

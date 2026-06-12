@@ -7,8 +7,8 @@ import { MatchGuessesModal } from '@/components/features/MatchGuessesModal'
 import { PageLoader } from '@/components/ui/LoadingSpinner'
 import { Badge } from '@/components/ui/Badge'
 import { useMatches } from '@/hooks/useMatches'
-import { useMyGuesses } from '@/hooks/useGuesses'
-import { PHASE_LABELS, formatMatchDate } from '@/lib/utils/dates'
+import { useMyGuesses, useMatchDistributions } from '@/hooks/useGuesses'
+import { PHASE_LABELS, formatMatchDate, isGuessingClosed } from '@/lib/utils/dates'
 import { calculatePoints } from '@/lib/utils/scoring'
 import type { Match, MatchPhase } from '@/lib/types'
 
@@ -22,6 +22,12 @@ export default function JogosPage() {
   const [viewGuessesMatch, setViewGuessesMatch] = useState<Match | null>(null)
 
   const guessMap = useMemo(() => new Map(myGuesses?.map((g) => [g.matchId, g])), [myGuesses])
+
+  const closedMatchIds = useMemo(
+    () => matches?.filter((m) => isGuessingClosed(m.matchDate, m.matchTime)).map((m) => m.id) ?? [],
+    [matches],
+  )
+  const { data: distributions } = useMatchDistributions(closedMatchIds)
 
   // Fases com jogos disponíveis
   const availablePhases = useMemo(() => {
@@ -136,6 +142,7 @@ export default function JogosPage() {
                         guess={guess}
                         onGuess={() => setGuessingMatch(match)}
                         onViewGuesses={() => setViewGuessesMatch(match)}
+                        guessDistribution={distributions?.[match.id] ?? null}
                       />
                     )}
                   </div>

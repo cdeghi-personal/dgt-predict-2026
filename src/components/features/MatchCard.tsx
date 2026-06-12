@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { CountryFlag } from './CountryFlag'
 import { formatMatchDate, PHASE_LABELS, isGuessingClosed } from '@/lib/utils/dates'
-import type { Match, Guess } from '@/lib/types'
+import type { Match, Guess, MatchGuessDistribution } from '@/lib/types'
 
 interface MatchCardProps {
   match: Match
@@ -13,12 +13,16 @@ interface MatchCardProps {
   onGuess?: () => void
   onViewGuesses?: () => void
   compact?: boolean
+  guessDistribution?: MatchGuessDistribution | null
 }
 
-export function MatchCard({ match, guess, onGuess, onViewGuesses, compact }: MatchCardProps) {
+export function MatchCard({ match, guess, onGuess, onViewGuesses, compact, guessDistribution }: MatchCardProps) {
   const isFinished = match.status === 'FINISHED'
   const hasResult = match.scoreCountry1 != null && match.scoreCountry2 != null
   const closed = isGuessingClosed(match.matchDate, match.matchTime)
+
+  const dist = closed && guessDistribution && guessDistribution.totalGuesses > 0 ? guessDistribution : null
+  const maxPct = dist ? Math.max(dist.country1WinPercentage, dist.drawPercentage, dist.country2WinPercentage) : 0
 
   return (
     <Card
@@ -48,6 +52,14 @@ export function MatchCard({ match, guess, onGuess, onViewGuesses, compact }: Mat
           </span>
           {guess && (
             <GuessBox value={guess.result1} side="left" guess={guess} match={match} />
+          )}
+          {dist && (
+            <span className={clsx(
+              'text-xs font-semibold',
+              dist.country1WinPercentage === maxPct ? 'text-primary' : 'text-mid-gray',
+            )}>
+              {dist.country1WinPercentage}%
+            </span>
           )}
         </div>
 
@@ -87,6 +99,14 @@ export function MatchCard({ match, guess, onGuess, onViewGuesses, compact }: Mat
               )}
             </div>
           )}
+          {dist && (
+            <span className={clsx(
+              'text-xs font-semibold',
+              dist.drawPercentage === maxPct ? 'text-primary' : 'text-mid-gray',
+            )}>
+              {dist.drawPercentage}%
+            </span>
+          )}
         </div>
 
         {/* País 2 */}
@@ -97,6 +117,14 @@ export function MatchCard({ match, guess, onGuess, onViewGuesses, compact }: Mat
           </span>
           {guess && (
             <GuessBox value={guess.result2} side="right" guess={guess} match={match} />
+          )}
+          {dist && (
+            <span className={clsx(
+              'text-xs font-semibold',
+              dist.country2WinPercentage === maxPct ? 'text-primary' : 'text-mid-gray',
+            )}>
+              {dist.country2WinPercentage}%
+            </span>
           )}
         </div>
       </div>

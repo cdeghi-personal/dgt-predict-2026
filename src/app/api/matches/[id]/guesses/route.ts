@@ -6,7 +6,7 @@ import { isGuessingClosed } from '@/lib/utils/dates'
 import { calculatePoints } from '@/lib/utils/scoring'
 import { mapMatch } from '@/lib/mappers'
 import { DAISY_USER_ID } from '@/lib/daisy/constants'
-import type { SydleGame, SydleGuess, SydleResult } from '@/lib/types'
+import type { SydleGame, SydleGuess, SydleResult, MatchGuessDistribution } from '@/lib/types'
 
 export type GuessOutcome = 'EXACT_SCORE' | 'CORRECT_RESULT' | 'WRONG' | 'PENDING'
 
@@ -30,6 +30,7 @@ export type MatchGuessesResponse = {
   correctResults: number
   wrong: number
   participants: MatchGuessParticipant[]
+  distribution: MatchGuessDistribution
 }
 
 function getToken(req: Request): string | null {
@@ -143,14 +144,33 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const correctResults = participants.filter((p) => p.outcome === 'CORRECT_RESULT').length
     const wrong          = participants.filter((p) => p.outcome === 'WRONG').length
 
+    let c1Wins = 0, draws = 0, c2Wins = 0
+    for (const p of participants) {
+      if (p.result1 > p.result2) c1Wins++
+      else if (p.result1 === p.result2) draws++
+      else c2Wins++
+    }
+    const total = participants.length
+    const pct = (n: number) => total > 0 ? Math.round((n / total) * 100) : 0
+    const distribution: MatchGuessDistribution = {
+      totalGuesses: total,
+      country1Wins: c1Wins,
+      draws,
+      country2Wins: c2Wins,
+      country1WinPercentage: pct(c1Wins),
+      drawPercentage: pct(draws),
+      country2WinPercentage: pct(c2Wins),
+    }
+
     const response: MatchGuessesResponse = {
       matchId: id,
       isFinished: finished,
-      totalGuesses: participants.length,
+      totalGuesses: total,
       exactScores,
       correctResults,
       wrong,
       participants,
+      distribution,
     }
 
     return NextResponse.json(response)
