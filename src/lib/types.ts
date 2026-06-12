@@ -209,6 +209,7 @@ export interface SydleDaisyDiary {
   content: string
   active: boolean
   date?: string              // "YYYY-MM-DDT00:00:00Z" — data de referência do diário
+  featuredMatch?: string     // matérias usadas pela IA para gerar o diário
   _creationDate?: number | string
   _lastUpdateDate?: number | string
 }
@@ -220,6 +221,7 @@ export interface DaisyDiary {
   content: string
   active: boolean
   date?: string              // "YYYY-MM-DDT00:00:00Z"
+  featuredMatch?: string     // matérias usadas pela IA para gerar o diário
   createdAt: string
   updatedAt?: string
 }

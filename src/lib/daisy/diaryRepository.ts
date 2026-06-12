@@ -16,6 +16,7 @@ function mapDiary(raw: SydleDaisyDiary): DaisyDiary {
     content: raw.content ?? '',
     active: raw.active ?? false,
     date: raw.date,
+    featuredMatch: raw.featuredMatch,
     createdAt: toDate(raw._creationDate),
     updatedAt: raw._lastUpdateDate ? toDate(raw._lastUpdateDate) : undefined,
   }
@@ -84,6 +85,7 @@ export async function createDiary(
   content: string,
   token: string,
   date?: string,
+  featuredMatch?: string,
 ): Promise<DaisyDiary> {
   const raw = await sydleCall<SydleDaisyDiary>(
     DAISY_PACKAGE,
@@ -95,6 +97,7 @@ export async function createDiary(
       content,
       active: false,
       ...(date ? { date } : {}),
+      ...(featuredMatch ? { featuredMatch } : {}),
     },
     token,
   )
@@ -138,6 +141,7 @@ export async function toggleDiaryActive(
       content:  current.content,
       active,
       ...(current.date ? { date: current.date } : {}),
+      ...(current.featuredMatch ? { featuredMatch: current.featuredMatch } : {}),
     },
     token,
   )

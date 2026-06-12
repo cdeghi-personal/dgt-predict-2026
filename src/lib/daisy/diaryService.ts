@@ -216,12 +216,20 @@ Retorne o conteúdo formatado em Markdown com seções usando ## para subtítulo
   const diaryRaw = await callOpenAI(personaPrompt, diaryUserMessage, { maxTokens: 2048, temperature: 0.8 })
   const diaryJson = parseJsonFromText<DiaryAIResponse>(diaryRaw)
 
+  // Matérias usadas pela IA — salvas no campo featuredMatch do SYDLE
+  const featuredMatch = newsResult.items.length > 0
+    ? newsResult.items
+        .map((item, i) => `[${i + 1}] ${item.title}\n${item.description}`)
+        .join('\n\n')
+    : undefined
+
   const diary = await createDiary(
     sanitize(diaryJson.title ?? 'Diário da Daisy'),
     sanitize(diaryJson.subtitle ?? ''),
     diaryJson.content ?? '',
     token,
     dateStr,
+    featuredMatch,
   )
 
   // ── Palpites — fluxo em 2 passos (falha não é fatal) ────────────────────────
