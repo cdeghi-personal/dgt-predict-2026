@@ -108,6 +108,73 @@ export default function RegrasPage() {
         </ul>
       </Section>
 
+      {/* ANFP */}
+      <div className="rounded-2xl border-2 border-dashed border-dark/20 bg-white p-5 relative overflow-hidden">
+        {/* Marca d'água */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none opacity-[0.04]">
+          <span className="text-[120px] font-black text-dark rotate-[-25deg]">ANFP</span>
+        </div>
+
+        {/* Cabeçalho institucional */}
+        <div className="flex items-start gap-3 mb-4">
+          <div className="w-12 h-12 rounded-full bg-dark flex items-center justify-center text-2xl shrink-0 shadow-md">
+            🏛️
+          </div>
+          <div>
+            <p className="text-[10px] font-bold text-mid-gray tracking-widest uppercase">Certificado por</p>
+            <p className="text-sm font-black text-dark leading-tight">
+              Agência Nacional de Fiscalização dos Palpites
+            </p>
+            <p className="text-xs font-bold text-primary">ANFP — Fundada em 2026</p>
+          </div>
+        </div>
+
+        {/* Corpo do certificado */}
+        <div className="text-xs text-dark/80 leading-relaxed space-y-2 mb-4">
+          <p>
+            <strong>Certificamos</strong>, para os devidos fins e sob as penas da lei bolística vigente,
+            que o <strong>DGT Predict 2026</strong> opera em plena conformidade com o
+            Regulamento Geral de Apostas Descontraídas (RGAD/2026), tendo sido auditado,
+            revisado, chancelado e aprovado pela mais alta instância fiscalizatória do bolão corporativo nacional.
+          </p>
+          <p>
+            Todo resultado registrado passa por rigoroso processo de análise técnica multidisciplinar,
+            composto por <strong>uma pessoa olhando a TV</strong> e posteriormente digitando no sistema.
+          </p>
+          <p>
+            Contestações devem ser enviadas por escrito, em papel timbrado, para a sede da ANFP —
+            que, <em>por coincidência</em>, não possui endereço fixo nem horário de funcionamento.
+          </p>
+        </div>
+
+        {/* Linha divisória */}
+        <div className="border-t border-dashed border-dark/20 pt-4">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <p className="text-[10px] text-mid-gray uppercase tracking-wider mb-1">Assinado por</p>
+              <p className="font-bold text-dark text-sm">Francisco Everardo Tabajara</p>
+              <p className="text-[11px] text-mid-gray">Presidente Vitalício · ANFP</p>
+              <p className="text-[10px] text-mid-gray/60 italic mt-0.5">
+                "A fiscalização é severa, mas a diversão é obrigatória."
+              </p>
+            </div>
+            <div className="text-right shrink-0">
+              <div className="w-14 h-14 rounded-full border-2 border-dark/30 flex flex-col items-center justify-center text-center bg-amber-50 shadow-inner">
+                <span className="text-[8px] font-black text-dark/50 uppercase leading-none tracking-tight">Selo</span>
+                <span className="text-lg leading-none">🔏</span>
+                <span className="text-[7px] font-black text-dark/50 uppercase leading-none tracking-tight">ANFP</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Rodapé institucional */}
+        <p className="text-[9px] text-mid-gray/50 text-center mt-3 leading-snug">
+          ANFP · Missão: Garantir a lisura, transparência e diversão do DGT Predict 2026 ·
+          Este certificado é válido enquanto durar a Copa · Reprodução proibida exceto para gargalhadas
+        </p>
+      </div>
+
       <p className="text-center text-xs text-mid-gray pb-4">
         Boa sorte a todos! 🇧🇷⚽
       </p>
