@@ -1,7 +1,6 @@
 // Server-side only — busca e resume notícias de fontes externas
-// As URLs das fontes são usadas apenas como contexto da IA; nunca são expostas no conteúdo final.
 import { callOpenAI } from './aiClient'
-import type { NewsResult } from './types'
+import type { NewsResult, NewsUrlDebug } from './types'
 
 const NEWS_SOURCES = [
   'https://ge.globo.com/futebol/copa-do-mundo/',
@@ -15,32 +14,49 @@ export async function fetchAndSummarizeNews(
   newsSummaryPrompt: string,
   personaPrompt: string,
 ): Promise<NewsResult> {
-  const results = await Promise.allSettled(
-    NEWS_SOURCES.map((url) =>
-      fetch(url, {
-        headers: { 'User-Agent': 'DGTPredict/1.0' },
-        signal: AbortSignal.timeout(8000),
-      })
-        .then((r) => r.text())
-        .then((t) => ({ url, text: t.slice(0, 3000) })),
-    ),
+  // Busca todas as fontes em paralelo — nunca rejeita, sempre resolve com status
+  const fetched = await Promise.all(
+    NEWS_SOURCES.map(async (url) => {
+      const t0 = Date.now()
+      try {
+        const r = await fetch(url, {
+          headers: { 'User-Agent': 'DGTPredict/1.0' },
+          signal: AbortSignal.timeout(8000),
+        })
+        const raw = await r.text()
+        return {
+          url,
+          ok: true,
+          text: raw.slice(0, 3000),
+          // Preview sem HTML para leitura humana no debug
+          contentPreview: raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 250),
+          durationMs: Date.now() - t0,
+          error: undefined as string | undefined,
+        }
+      } catch (err) {
+        return {
+          url,
+          ok: false,
+          text: '',
+          contentPreview: undefined,
+          durationMs: Date.now() - t0,
+          error: err instanceof Error ? err.message : String(err),
+        }
+      }
+    }),
   )
 
-  const successUrls: string[] = []
-  const errorUrls: string[] = []
-  const textParts: string[] = []
+  const urlResults: NewsUrlDebug[] = fetched.map((f) => ({
+    url:            f.url,
+    status:         f.ok ? ('success' as const) : ('error' as const),
+    errorMessage:   f.error,
+    contentPreview: f.contentPreview,
+    durationMs:     f.durationMs,
+  }))
 
-  for (let i = 0; i < results.length; i++) {
-    const r = results[i]
-    const url = NEWS_SOURCES[i]
-    if (r.status === 'fulfilled') {
-      successUrls.push(url)
-      // Passa o conteúdo sem identificar a fonte — evita que a IA cite portais
-      textParts.push(r.value.text)
-    } else {
-      errorUrls.push(url)
-    }
-  }
+  const successUrls = fetched.filter((f) => f.ok).map((f) => f.url)
+  const errorUrls   = fetched.filter((f) => !f.ok).map((f) => f.url)
+  const textParts   = fetched.filter((f) => f.ok && f.text).map((f) => f.text)
 
   let summary = ''
   if (textParts.length > 0 && newsSummaryPrompt) {
@@ -50,16 +66,23 @@ export async function fetchAndSummarizeNews(
         `${newsSummaryPrompt}\n\nConteúdo esportivo recente:\n\n${textParts.join('\n\n---\n\n')}`,
         { maxTokens: 512, temperature: 0.3 },
       )
-    } catch {
+    } catch (err) {
+      console.error('[daisy/news] OpenAI summary failed:', err)
       summary = ''
     }
   }
 
+  console.log(
+    `[daisy/news] Fontes: ${successUrls.length} OK / ${errorUrls.length} ERRO | Summary: ${summary ? `${summary.length} chars` : 'vazio'}`,
+  )
+
   return {
-    items: [],  // URLs não expostas no conteúdo final
+    items:          [],   // não exposto no conteúdo final — usar summary
     successUrls,
     errorUrls,
     summary,
+    summaryPreview: summary.slice(0, 400),
+    urlResults,
   }
 }
 

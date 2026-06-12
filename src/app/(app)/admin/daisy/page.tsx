@@ -511,7 +511,16 @@ function DebugPanel({ debug }: { debug: DiaryDebugInfo }) {
             Resultados recentes: {debug.recentResultEntries.length} {debug.recentResultEntries.length > 0 ? '✅' : '❌'}
           </div>
           <div><span className="text-mid-gray">Jogos futuros:</span> {debug.upcomingGamesDebug.length}</div>
-          <div><span className="text-mid-gray">Notícias:</span> {debug.newsItems.length}</div>
+          <div>
+            <span className="text-mid-gray">Notícias (fontes):</span>{' '}
+            <span className={debug.newsUrlResults.filter((u) => u.status === 'success').length > 0 ? 'text-green-700 font-bold' : 'text-red-600 font-bold'}>
+              {debug.newsUrlResults.filter((u) => u.status === 'success').length}/{debug.newsUrlResults.length} OK
+            </span>
+            {' · '}
+            <span className={debug.newsSummaryEmpty ? 'text-red-600 font-bold' : 'text-green-700'}>
+              summary {debug.newsSummaryEmpty ? 'VAZIO ❌' : '✅'}
+            </span>
+          </div>
           <div><span className="text-mid-gray">Prompts carregados:</span> {debug.promptsLoadedCount}</div>
           <div><span className="text-mid-gray">Jogos analisados (raw):</span> {debug.gamesRawCount}</div>
           <div><span className="text-mid-gray">Resultados (raw):</span> {debug.resultsRawCount}</div>
@@ -531,8 +540,41 @@ function DebugPanel({ debug }: { debug: DiaryDebugInfo }) {
         </div>
       </DebugSection>
 
-      {/* 2. Todos os jogos analisados */}
-      <DebugSection title={`2. Jogos analisados (${debug.allGamesAnalyzed.length} raw)`}>
+      {/* 2. Resultados no SYDLE — visão resultado-primeiro (diagnóstico principal) */}
+      <DebugSection title={`2. Resultados no SYDLE (${debug.resultsDebug.length}) — diagnóstico principal`}>
+        <div className="space-y-0.5">
+          {debug.resultsDebug.length === 0 && (
+            <p className="text-xs text-red-600 font-medium">⚠️ Nenhum resultado registrado no SYDLE ainda.</p>
+          )}
+          {debug.resultsDebug.map((r, i) => (
+            <div
+              key={i}
+              className={`text-[10px] font-mono flex flex-wrap gap-x-3 py-0.5 border-b border-gray-100 ${r.withinWindow ? 'bg-green-50' : ''}`}
+            >
+              <span className={`font-semibold ${r.withinWindow ? 'text-green-700' : r.gameFoundInMap && !r.isInFuture ? 'text-amber-600' : 'text-mid-gray'}`}>
+                {r.country1} {r.score} {r.country2}
+              </span>
+              <span className={r.gameFoundInMap ? 'text-gray-500' : 'text-red-600 font-bold'}>
+                {r.gameFoundInMap ? 'jogo ✓' : '⚠️ jogo não encontrado no gameMap'}
+              </span>
+              {r.gameFoundInMap && (
+                <>
+                  <span className={r.isInFuture ? 'text-blue-500' : 'text-gray-500'}>
+                    {r.isInFuture ? '🔵 futuro' : '⚫ passado'}
+                  </span>
+                  <span className={r.withinWindow ? 'text-green-600 font-bold' : 'text-amber-500'}>
+                    {r.withinWindow ? '✅ na janela' : '⚠️ fora da janela'}
+                  </span>
+                </>
+              )}
+              <span className="text-gray-400">{r.gameDateLabel}</span>
+            </div>
+          ))}
+        </div>
+      </DebugSection>
+
+      {/* 3. Jogos analisados — visão jogo-primeiro (top 50 por data DESC) */}
+      <DebugSection title={`3. Jogos analisados — top 50 por data (${debug.allGamesAnalyzed.length})`}>
         <div className="space-y-0.5">
           {debug.allGamesAnalyzed.length === 0 && (
             <p className="text-xs text-red-600 font-medium">⚠️ Nenhum jogo retornado pelo SYDLE.</p>
@@ -562,8 +604,8 @@ function DebugPanel({ debug }: { debug: DiaryDebugInfo }) {
         </div>
       </DebugSection>
 
-      {/* 3. Resultados recentes enviados */}
-      <DebugSection title={`3. Resultados recentes enviados à IA (${debug.recentResultEntries.length})`}>
+      {/* 4. Resultados recentes enviados à IA */}
+      <DebugSection title={`4. Resultados recentes enviados à IA (${debug.recentResultEntries.length})`}>
         {debug.recentResultEntries.length === 0 ? (
           <p className="text-xs text-red-600 font-medium">⚠️ Nenhum resultado recente — verifique a seção 2 para entender o motivo.</p>
         ) : (
@@ -571,8 +613,8 @@ function DebugPanel({ debug }: { debug: DiaryDebugInfo }) {
         )}
       </DebugSection>
 
-      {/* 4. Jogos futuros */}
-      <DebugSection title={`4. Jogos futuros enviados à IA (${debug.upcomingGamesDebug.length})`}>
+      {/* 5. Jogos futuros */}
+      <DebugSection title={`5. Jogos futuros enviados à IA (${debug.upcomingGamesDebug.length})`}>
         {debug.upcomingGamesDebug.length === 0 ? (
           <p className="text-xs text-amber-600">Nenhum jogo futuro encontrado.</p>
         ) : (
@@ -580,20 +622,46 @@ function DebugPanel({ debug }: { debug: DiaryDebugInfo }) {
         )}
       </DebugSection>
 
-      {/* 5. Notícias */}
-      <DebugSection title={`5. Notícias enviadas (${debug.newsItems.length})`}>
-        {debug.newsItems.length === 0 ? (
-          <p className="text-xs text-mid-gray italic">Nenhuma notícia coletada.</p>
-        ) : (
-          <div className="space-y-2">
-            {debug.newsItems.map((n, i) => (
-              <div key={i} className="text-xs border-b border-gray-100 pb-2">
-                <p className="font-semibold text-dark">[{i + 1}] {n.title}</p>
-                <p className="text-mid-gray mt-0.5 leading-snug">{n.description}</p>
+      {/* 6. Notícias — debug por URL + summary */}
+      <DebugSection title={`6. Notícias (${debug.newsUrlResults.filter((u) => u.status === 'success').length}/${debug.newsUrlResults.length} fontes OK · summary ${debug.newsSummaryEmpty ? 'VAZIO ❌' : '✅'})`}>
+        <div className="space-y-2">
+          {debug.newsUrlResults.map((u, i) => (
+            <div key={i} className={`rounded-lg border p-2 ${u.status === 'success' ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
+              <div className="flex items-start justify-between gap-2">
+                <span className="font-mono text-[10px] break-all text-dark">{u.url}</span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className={`text-[10px] font-bold ${u.status === 'success' ? 'text-green-700' : 'text-red-600'}`}>
+                    {u.status === 'success' ? '✅' : '❌'}
+                  </span>
+                  <span className="text-[10px] text-mid-gray">{u.durationMs}ms</span>
+                </div>
               </div>
-            ))}
-          </div>
-        )}
+              {u.errorMessage && (
+                <p className="text-[10px] text-red-700 mt-1 font-mono">{u.errorMessage}</p>
+              )}
+              {u.contentPreview && (
+                <p className="text-[10px] text-mid-gray mt-1 leading-relaxed line-clamp-2">{u.contentPreview}</p>
+              )}
+            </div>
+          ))}
+          {debug.newsUrlResults.length === 0 && (
+            <p className="text-xs text-red-600 font-medium">⚠️ Nenhuma fonte de notícias configurada.</p>
+          )}
+        </div>
+        <div className="mt-3">
+          <p className="text-[10px] font-semibold text-mid-gray uppercase tracking-wide mb-1">
+            Summary gerado pela IA {debug.newsSummaryEmpty ? '— VAZIO ❌' : '✅'}
+          </p>
+          {debug.newsSummaryEmpty ? (
+            <p className="text-xs text-red-600 italic">
+              Nenhum summary — ou todas as fontes falharam, ou o prompt DAISY_NEWS_SUMMARY está vazio/inativo.
+            </p>
+          ) : (
+            <pre className="text-[10px] font-mono bg-gray-50 rounded-lg p-2 leading-relaxed whitespace-pre-wrap text-dark">
+              {debug.newsSummaryPreview}…
+            </pre>
+          )}
+        </div>
       </DebugSection>
 
       {/* 6. Prompts */}

@@ -11,22 +11,16 @@ import { DAISY_PROMPT_IDENTIFIERS } from './constants'
 import { calculatePoints } from '@/lib/utils/scoring'
 import { mapGuess } from '@/lib/mappers'
 import type { SydleGame, SydleResult, SydleGuess } from '@/lib/types'
-import type { GenerateDiaryResult, NewsResult, DiaryDebugInfo, DiaryDebugGameEntry } from './types'
+import type {
+  GenerateDiaryResult, NewsResult,
+  DiaryDebugInfo, DiaryDebugGameEntry, ResultDebugEntry,
+} from './types'
 
 const BRT_OFFSET_MS = -3 * 60 * 60 * 1000
 const AI_MODEL = 'gpt-4.1'
 
-interface DiaryAIResponse {
-  title: string
-  subtitle: string
-  content: string
-}
-
-interface GuessAIResponse {
-  gameId: string
-  result1: number
-  result2: number
-}
+interface DiaryAIResponse { title: string; subtitle: string; content: string }
+interface GuessAIResponse  { gameId: string; result1: number; result2: number }
 
 interface RecentResultEntry {
   country1: string; country2: string
@@ -34,7 +28,7 @@ interface RecentResultEntry {
   group: string; phase: string; finishedAt: string
 }
 
-// Parse campos de data do SYDLE — podem vir como ms (number) ou ISO string
+// Parse campos de data SYDLE — podem vir como ms (number) ou ISO string
 function parseTs(date: number | string | undefined): number {
   if (typeof date === 'number') return date
   if (typeof date === 'string' && date) return new Date(date).getTime()
@@ -55,16 +49,15 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
   // ── Busca paralela no SYDLE ──────────────────────────────────────────────────
   const [prompts, gamesRaw, resultsRaw, guessesRaw, allGamesRaw, recentDiaries, countryMap] = await Promise.all([
     getAllPrompts(token),
-    // Jogos recentes (para detectar resultados) — data DESC, maior janela possível
+    // Jogos recentes (para debug e contexto histórico) — data DESC
     sydleCall(SYDLE_PACKAGE, SYDLE_CLASS.games, SYDLE_METHOD.search,
       { query: { match_all: {} }, sort: [{ date: { order: 'desc' } }], size: 50 }, token),
-    // Todos os resultados para montar o resultMap
+    // Todos os resultados — base da detecção de jogos recentes
     sydleCall(SYDLE_PACKAGE, SYDLE_CLASS.results, SYDLE_METHOD.search,
       { query: { match_all: {} }, sort: [{ _creationDate: { order: 'desc' } }], size: 200 }, token),
-    // Palpites para ranking
     sydleCall(SYDLE_PACKAGE, SYDLE_CLASS.guesses, SYDLE_METHOD.search,
       { query: { match_all: {} }, size: 1000 }, token),
-    // Todos os jogos para filtrar próximos (client-side, evita depender de range query com tipo incerto)
+    // TODOS os jogos para gameMap (client-side lookup) — evita problema de size/sort
     sydleCall(SYDLE_PACKAGE, SYDLE_CLASS.games, SYDLE_METHOD.search,
       { query: { match_all: {} }, sort: [{ date: { order: 'asc' } }], size: 200 }, token),
     getMostRecentDiaries(3, token).catch(() => []),
@@ -78,66 +71,69 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
   const newsSummaryPrompt   = promptMap.get(DAISY_PROMPT_IDENTIFIERS.newsSummary)?.prompt   ?? ''
   const matchAnalysisPrompt = promptMap.get(DAISY_PROMPT_IDENTIFIERS.matchAnalysis)?.prompt ?? ''
 
-  const recentGames   = parseSearch<SydleGame>(gamesRaw)
-  const allResults    = parseSearch<SydleResult>(resultsRaw)
-  const allGamesAll   = parseSearch<SydleGame>(allGamesRaw)
-  const allGuesses    = parseSearch<SydleGuess>(guessesRaw).map(mapGuess)
+  const recentGames = parseSearch<SydleGame>(gamesRaw)
+  const allResults  = parseSearch<SydleResult>(resultsRaw)
+  const allGamesAll = parseSearch<SydleGame>(allGamesRaw)
+  const allGuesses  = parseSearch<SydleGuess>(guessesRaw).map(mapGuess)
 
-  const resultMap = new Map(allResults.map((r) => [r.game?._id, r]))
+  // gameMap: lookup de jogo por ID — cobre TODOS os jogos do torneio
+  const gameMap     = new Map(allGamesAll.map((g) => [g._id, g]))
+  // resultMap: usado para o debug "allGamesAnalyzed" (visão jogo-primeiro)
+  const resultMap   = new Map(allResults.map((r) => [r.game?._id, r]))
 
   const countryName = (id: string | undefined) =>
     (id ? countryMap.get(id)?.country : undefined) ?? '?'
 
-  // ── Janela de tempo para resultados "recentes" ──────────────────────────────
-  // Usa a maior janela entre: desde o último diário e últimas 48h
+  // ── Janela de tempo para resultados "recentes" ───────────────────────────────
   const last24h = now - 24 * 60 * 60 * 1000
   const last48h = now - 48 * 60 * 60 * 1000
   const lastDiaryTs = recentDiaries[0]?.createdAt
     ? new Date(recentDiaries[0].createdAt).getTime()
     : last24h
-  // Math.min = timestamp mais antigo = janela maior
-  const recentCutoff = Math.min(lastDiaryTs, last48h)
+  const recentCutoff = Math.min(lastDiaryTs, last48h)   // maior janela (timestamp mais antigo)
 
-  // ── Itera jogos recentes — monta debug + resultados recentes ─────────────────
+  // ── FIX: visão RESULTADO-PRIMEIRO ───────────────────────────────────────────
+  // Antes: iterava jogos e buscava resultado → perdia jogos fora dos top-50 por data
+  // Agora: itera resultados e resolve o jogo via gameMap (cobre todos os 200 jogos)
   const recentResultEntries: RecentResultEntry[] = []
   const allFinishedForContext: string[] = []
-  const allGamesAnalyzed: DiaryDebugGameEntry[] = []
+  const resultsDebug: ResultDebugEntry[] = []
 
-  for (const g of recentGames) {
-    const r = resultMap.get(g._id)
-    const gameTs = parseTs(g.date)
-    const hasResult = !!r
-    const isInFuture = !isNaN(gameTs) && gameTs > now
-    const withinWindow = hasResult && !isNaN(gameTs) && !isInFuture && gameTs >= recentCutoff
+  for (const r of allResults) {
+    const gameId = r.game?._id ?? ''
+    const g      = gameMap.get(gameId)
+    const gameTs = g ? parseTs(g.date) : NaN
 
-    allGamesAnalyzed.push({
-      gameId:      g._id,
-      country1:    countryName(g.country1?._id),
-      country2:    countryName(g.country2?._id),
-      gameDateRaw: g.date,
-      gameDateMs:  isNaN(gameTs) ? null : gameTs,
-      hasResult,
-      result1:     r?.result1,
-      result2:     r?.result2,
-      group:       g.group ?? '',
-      phase:       g.phase ?? '',
+    const gameFoundInMap = !!g
+    const isInFuture     = gameFoundInMap && !isNaN(gameTs) && gameTs > now
+    const withinWindow   = gameFoundInMap && !isNaN(gameTs) && !isInFuture && gameTs >= recentCutoff
+
+    resultsDebug.push({
+      resultId:       r._id,
+      gameId,
+      country1:       g ? countryName(g.country1?._id) : '?',
+      country2:       g ? countryName(g.country2?._id) : '?',
+      score:          `${r.result1}×${r.result2}`,
+      gameDateMs:     (g && !isNaN(gameTs)) ? gameTs : null,
+      gameDateLabel:  !g ? 'não encontrado no gameMap' : isNaN(gameTs) ? 'NaN' : new Date(gameTs).toISOString().slice(0, 16),
+      gameFoundInMap,
       isInFuture,
       withinWindow,
     })
 
-    if (!hasResult || isNaN(gameTs) || isInFuture) continue
+    if (!g || isNaN(gameTs) || isInFuture) continue
 
     allFinishedForContext.push(
-      `${countryName(g.country1?._id)} ${r!.result1} x ${r!.result2} ${countryName(g.country2?._id)}`
+      `${countryName(g.country1?._id)} ${r.result1} x ${r.result2} ${countryName(g.country2?._id)}`
     )
 
-    if (gameTs < recentCutoff) continue
+    if (!withinWindow) continue
 
     recentResultEntries.push({
       country1:   countryName(g.country1?._id),
       country2:   countryName(g.country2?._id),
-      result1:    r!.result1,
-      result2:    r!.result2,
+      result1:    r.result1,
+      result2:    r.result2,
       group:      g.group ?? '',
       phase:      g.phase ?? '',
       finishedAt: brtLabel(gameTs),
@@ -147,33 +143,45 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
   const hasRecentResults   = recentResultEntries.length > 0
   const recentResultsCount = recentResultEntries.length
 
-  // ── Próximos jogos (filtro client-side — mais confiável que range query) ──────
+  // ── Debug: visão jogo-primeiro (top 50 por data DESC) ───────────────────────
+  // Mantida para diagnóstico — mostra se algum jogo tem data NaN ou problemas similares
+  const allGamesAnalyzed: DiaryDebugGameEntry[] = recentGames.map((g) => {
+    const r       = resultMap.get(g._id)
+    const gameTs  = parseTs(g.date)
+    const isInFuture  = !isNaN(gameTs) && gameTs > now
+    const withinWindow = !!r && !isNaN(gameTs) && !isInFuture && gameTs >= recentCutoff
+    return {
+      gameId:      g._id,
+      country1:    countryName(g.country1?._id),
+      country2:    countryName(g.country2?._id),
+      gameDateRaw: g.date,
+      gameDateMs:  isNaN(gameTs) ? null : gameTs,
+      hasResult:   !!r,
+      result1:     r?.result1,
+      result2:     r?.result2,
+      group:       g.group ?? '',
+      phase:       g.phase ?? '',
+      isInFuture,
+      withinWindow,
+    }
+  })
+
+  // ── Próximos jogos (filtro client-side, sem depender de range query) ─────────
   const upcomingGames = allGamesAll
-    .filter((g) => {
-      const ts = parseTs(g.date)
-      return !isNaN(ts) && ts > now
-    })
+    .filter((g) => { const ts = parseTs(g.date); return !isNaN(ts) && ts > now })
     .sort((a, b) => parseTs(a.date) - parseTs(b.date))
     .slice(0, 15)
 
   const upcomingGamesCount = upcomingGames.length
   const upcomingGamesDebug = upcomingGames.map((g) => {
     const ts = parseTs(g.date)
-    return {
-      gameId:    g._id,
-      country1:  countryName(g.country1?._id),
-      country2:  countryName(g.country2?._id),
-      gameDateMs: isNaN(ts) ? null : ts,
-    }
+    return { gameId: g._id, country1: countryName(g.country1?._id), country2: countryName(g.country2?._id), gameDateMs: isNaN(ts) ? null : ts }
   })
 
-  // ── Jogos acontecidos sem resultado no sistema ───────────────────────────────
-  const pendingResultGames = recentGames
-    .filter((g) => {
-      if (resultMap.has(g._id)) return false
-      const ts = parseTs(g.date)
-      return !isNaN(ts) && ts < now
-    })
+  // ── Jogos sem resultado no sistema ──────────────────────────────────────────
+  const pendingResultGames = allGamesAll
+    .filter((g) => { const ts = parseTs(g.date); return !resultMap.has(g._id) && !isNaN(ts) && ts < now })
+    .sort((a, b) => parseTs(b.date) - parseTs(a.date))
     .slice(0, 5)
   const pendingResultContext = pendingResultGames.length > 0
     ? '\n\nJogos recentes sem resultado no sistema (já aconteceram — use as notícias para comentar):\n' +
@@ -190,14 +198,11 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
     prev.pts += points
     userAccum.set(guess.userId, prev)
   }
-  const topUsers = [...userAccum.entries()]
-    .sort((a, b) => b[1].pts - a[1].pts)
-    .slice(0, 10)
+  const topUsers = [...userAccum.entries()].sort((a, b) => b[1].pts - a[1].pts).slice(0, 10)
   const rankingContext = topUsers.length
     ? topUsers.map(([, u], i) => `${i + 1}. ${u.name} — ${u.pts} pts`).join('\n')
     : 'Ranking ainda sem pontuação.'
 
-  // ── Próximos jogos para o prompt ─────────────────────────────────────────────
   const upcomingContext = upcomingGames.length
     ? upcomingGames.map((g) => `${countryName(g.country1?._id)} vs ${countryName(g.country2?._id)}`).join('\n')
     : 'Nenhum jogo programado nos próximos dias.'
@@ -205,27 +210,31 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
   // ── Notícias ─────────────────────────────────────────────────────────────────
   const newsResult: NewsResult = await fetchAndSummarizeNews(newsSummaryPrompt, personaPrompt)
   const newsContext = buildNewsContext(newsResult.summary)
-  const newsHighlightsCount = newsResult.items.length
+  // FIX: métrica correta — quantas fontes responderam (items é sempre [])
+  const newsHighlightsCount = newsResult.successUrls.length
 
-  // ── Diagnóstico do contexto ──────────────────────────────────────────────────
+  // ── Diagnóstico de contexto ──────────────────────────────────────────────────
   console.log(
-    `[daisy] Context — Recent Results: ${recentResultsCount} | Upcoming Games: ${upcomingGamesCount} | News: ${newsHighlightsCount} | Cutoff: ${new Date(recentCutoff).toISOString()}`
+    `[daisy] Context — Results: ${allResults.length} raw / ${recentResultsCount} recent | ` +
+    `Games: ${allGamesAll.length} all / ${recentGames.length} recent-query | ` +
+    `Upcoming: ${upcomingGamesCount} | News: ${newsHighlightsCount} OK / ${newsResult.errorUrls.length} ERR | ` +
+    `Summary: ${newsResult.summary ? `${newsResult.summary.length} chars` : 'VAZIO'} | ` +
+    `Cutoff: ${new Date(recentCutoff).toISOString()}`
   )
-  console.log(
-    `[daisy] Games analyzed: ${allGamesAnalyzed.length} total | ` +
-    `with result: ${allGamesAnalyzed.filter((g) => g.hasResult).length} | ` +
-    `in window: ${recentResultsCount} | ` +
-    `date NaN: ${allGamesAnalyzed.filter((g) => g.gameDateMs === null).length}`
-  )
+  if (resultsDebug.length > 0) {
+    const notFound = resultsDebug.filter((r) => !r.gameFoundInMap).length
+    const outWindow = resultsDebug.filter((r) => r.gameFoundInMap && !r.withinWindow && !r.isInFuture).length
+    console.log(`[daisy] Results debug — total: ${resultsDebug.length} | not in gameMap: ${notFound} | fora da janela: ${outWindow} | na janela: ${recentResultsCount}`)
+  }
 
   // ── Posts anteriores ─────────────────────────────────────────────────────────
   const previousPostsContext = recentDiaries.length > 0
-    ? '\n\nSeus posts anteriores (referência de contexto — do mais recente ao mais antigo):\n' +
+    ? '\n\nSeus posts anteriores (referência — do mais recente ao mais antigo):\n' +
       recentDiaries.map((d, i) => {
         const excerpt = d.content.replace(/[#*`>\-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 300)
         return `--- Post ${i + 1} (${d.createdAt.slice(0, 10)}) ---\nTítulo: ${d.title}\nSubtítulo: ${d.subtitle}\nExcerto: ${excerpt}…`
       }).join('\n\n') +
-      '\n\nEsses posts são apenas referência. Conecte só se houver continuidade natural — caso contrário, escreva como edição independente.'
+      '\n\nEsses posts são apenas referência. Conecte só se houver continuidade natural.'
     : ''
 
   // ── Blocos de contexto para o prompt ─────────────────────────────────────────
@@ -246,7 +255,7 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
 
   const markdownInstruction = `\nRetorne o conteúdo formatado em Markdown com seções usando ## para subtítulos, listas com *, negrito com ** e separadores com ---. Use seu próprio estilo — não cite portais, fontes ou sites. Escreva como se as ideias fossem suas, em primeira pessoa.\n`
 
-  // ── Prompt final para a IA ────────────────────────────────────────────────────
+  // ── Prompt final ─────────────────────────────────────────────────────────────
   const diaryUserMessage = [
     diaryPrompt,
     recentResultsInstruction,
@@ -272,7 +281,6 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
   try {
     diaryJson = parseJsonFromText<DiaryAIResponse>(rawAIResponse)
   } catch {
-    // Resposta não parseável como JSON — usa o texto bruto como content
     diaryJson = { title: 'Diário da Daisy', subtitle: '', content: rawAIResponse }
   }
 
@@ -294,20 +302,23 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
 
   const generatedAt = new Date().toISOString()
 
-  const debugBase = {
+  const debugBase: Omit<DiaryDebugInfo, 'savedPayload' | 'validationPassed' | 'validationNote'> = {
     model:             AI_MODEL,
     generatedAt,
     cutoffMs:          recentCutoff,
     cutoffLabel:       `${new Date(recentCutoff).toISOString()} (${brtLabel(recentCutoff)})`,
     lastDiaryDate:     recentDiaries[0]?.createdAt,
-    gamesRawCount:     recentGames.length,
+    gamesRawCount:     allGamesAll.length,
     resultsRawCount:   allResults.length,
     promptsLoadedCount: prompts.length,
+    resultsDebug,
     allGamesAnalyzed,
     recentResultEntries,
     upcomingGamesDebug,
-    newsItems:         newsResult.items.map((n) => ({ title: n.title, description: n.description })),
-    promptsLoaded:     prompts.map((p) => ({
+    newsUrlResults:      newsResult.urlResults,
+    newsSummaryPreview:  newsResult.summaryPreview,
+    newsSummaryEmpty:    !newsResult.summary.trim(),
+    promptsLoaded:       prompts.map((p) => ({
       identifier: p.identifier,
       version:    p.version,
       active:     p.active,
@@ -317,21 +328,14 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
     rawAIResponse,
   }
 
-  // ── Bloqueio: não salva se a IA ignorou resultados recentes ──────────────────
+  // ── Bloqueio: não salva se IA ignorou resultados recentes ────────────────────
   if (!validationPassed) {
     console.warn(`[daisy] Validation FAILED — ${validationNote}`)
-    const debug: DiaryDebugInfo = {
-      ...debugBase,
-      savedPayload:    null,
-      validationPassed: false,
-      validationNote,
-    }
+    const debug: DiaryDebugInfo = { ...debugBase, savedPayload: null, validationPassed: false, validationNote }
     return {
-      diary:          null,
-      saved:          false,
+      diary: null, saved: false,
       validationError: 'A IA ignorou os resultados recentes. O diário não foi salvo. Revise o debug do contexto.',
-      debug,
-      newsResult,
+      debug, newsResult,
       newsAnalyzed:        newsResult.successUrls.length,
       recentResultsCount,
       upcomingGamesCount,
@@ -343,12 +347,13 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
     }
   }
 
-  // ── Matérias salvas em featuredMatch ──────────────────────────────────────────
-  const featuredMatch = newsResult.items.length > 0
-    ? newsResult.items
-        .map((item, i) => `[${i + 1}] ${item.title}\n${item.description}`)
-        .join('\n\n')
-    : undefined
+  // ── Matérias em featuredMatch ─────────────────────────────────────────────────
+  const featuredMatchParts: string[] = []
+  if (newsResult.summaryPreview) featuredMatchParts.push(`[Resumo de notícias]\n${newsResult.summaryPreview}`)
+  recentResultEntries.forEach((e, i) =>
+    featuredMatchParts.push(`[Resultado ${i + 1}] ${e.country1} ${e.result1}×${e.result2} ${e.country2} — ${e.finishedAt}`)
+  )
+  const featuredMatch = featuredMatchParts.length > 0 ? featuredMatchParts.join('\n\n') : undefined
 
   const savedPayload = {
     date:           dateStr,
@@ -358,7 +363,6 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
     featuredMatch,
   }
 
-  // ── Salva no SYDLE ───────────────────────────────────────────────────────────
   const diary = await createDiary(
     savedPayload.tytle,
     savedPayload.subtytle,
@@ -368,92 +372,57 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
     featuredMatch,
   )
 
-  const debug: DiaryDebugInfo = {
-    ...debugBase,
-    savedPayload,
-    validationPassed: true,
-    validationNote,
-  }
+  const debug: DiaryDebugInfo = { ...debugBase, savedPayload, validationPassed: true, validationNote }
 
-  // ── Palpites — fluxo em 2 passos (falha não é fatal) ────────────────────────
+  // ── Palpites — 2 passos, falha não é fatal ────────────────────────────────────
   if (upcomingGames.length > 0 && guessesPrompt) {
     try {
       const gamesCtx = upcomingGames.map((g) =>
         `gameId: ${g._id}, ${countryName(g.country1?._id)} vs ${countryName(g.country2?._id)}`
       ).join('\n')
+      const fullResultsCtx = allFinishedForContext.slice(0, 10).join('\n') || 'Nenhum resultado registrado ainda.'
 
-      const fullResultsCtx =
-        allFinishedForContext.slice(0, 10).join('\n') || 'Nenhum resultado registrado ainda.'
-
-      // Passo 1 — análise por jogo (não fatal)
       let analysisContext = ''
       if (matchAnalysisPrompt) {
         try {
-          const analysisInput = [
+          const analysisRaw = await callOpenAI(personaPrompt, [
             matchAnalysisPrompt,
             hasRecentResults
               ? '\n\nResultados recentes:\n' + JSON.stringify(recentResultEntries, null, 2)
               : '\n\nResultados recentes:\n' + (fullResultsCtx || 'Nenhum resultado registrado ainda.'),
-            pendingResultContext,
-            newsContext,
+            pendingResultContext, newsContext,
             `\n\nJogos para análise:\n${gamesCtx}`,
             '\n\nRetorne APENAS JSON válido: array de objetos com gameId, country1, country2, analysis.',
-          ].join('')
+          ].join(''), { maxTokens: 1024, temperature: 0.5 })
 
-          const analysisRaw = await callOpenAI(personaPrompt, analysisInput, {
-            maxTokens: 1024,
-            temperature: 0.5,
-          })
-          const analysisArr = parseJsonFromText<
-            { gameId: string; country1: string; country2: string; analysis: string }[]
-          >(analysisRaw)
-
+          const analysisArr = parseJsonFromText<{ gameId: string; country1: string; country2: string; analysis: string }[]>(analysisRaw)
           if (Array.isArray(analysisArr) && analysisArr.length > 0) {
-            analysisContext =
-              '\n\nAnálise prévia dos jogos:\n' +
+            analysisContext = '\n\nAnálise prévia dos jogos:\n' +
               analysisArr.map((a) => `${a.country1} vs ${a.country2}: ${a.analysis}`).join('\n')
           }
-        } catch (err) {
-          console.error('[daisy] match analysis step failed (non-fatal):', err)
-        }
+        } catch (err) { console.error('[daisy] match analysis failed (non-fatal):', err) }
       }
 
-      // Passo 2 — palpites com contexto completo
-      const guessRaw = await callOpenAI(
-        personaPrompt,
-        [
-          guessesPrompt,
-          `\n\nResultados recentes:\n${fullResultsCtx}`,
-          pendingResultContext,
-          newsContext,
-          analysisContext,
-          `\n\nJogos para as próximas 24h:\n${gamesCtx}`,
-          '\n\nRetorne APENAS JSON válido: array de objetos com gameId, result1 e result2.',
-        ].join(''),
-        { maxTokens: 512, temperature: 0.7 },
-      )
+      const guessRaw = await callOpenAI(personaPrompt, [
+        guessesPrompt,
+        `\n\nResultados recentes:\n${fullResultsCtx}`,
+        pendingResultContext, newsContext, analysisContext,
+        `\n\nJogos para as próximas 24h:\n${gamesCtx}`,
+        '\n\nRetorne APENAS JSON válido: array de objetos com gameId, result1 e result2.',
+      ].join(''), { maxTokens: 512, temperature: 0.7 })
 
       const guessArr = parseJsonFromText<GuessAIResponse[]>(guessRaw)
       if (Array.isArray(guessArr) && guessArr.length > 0) {
         await saveDaisyGuesses(
-          guessArr.map((g) => ({
-            gameId:  g.gameId,
-            result1: clamp(Number(g.result1) || 0),
-            result2: clamp(Number(g.result2) || 0),
-          })),
+          guessArr.map((g) => ({ gameId: g.gameId, result1: clamp(Number(g.result1) || 0), result2: clamp(Number(g.result2) || 0) })),
           token,
         )
       }
-    } catch (err) {
-      console.error('[daisy] guess generation failed:', err)
-    }
+    } catch (err) { console.error('[daisy] guess generation failed:', err) }
   }
 
   return {
-    diary,
-    saved: true,
-    debug,
-    newsResult,
+    diary, saved: true, debug, newsResult,
     newsAnalyzed:        newsResult.successUrls.length,
     recentResultsCount,
     upcomingGamesCount,
