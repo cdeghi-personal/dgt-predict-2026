@@ -12,7 +12,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import type { DaisyDiary } from '@/lib/types'
-import type { DaisyAITestResult, GenerateDiaryResult, GenerateGuessesResult } from '@/lib/daisy/types'
+import type { DaisyAITestResult, GenerateDiaryResult, GenerateGuessesResult, DiaryDebugInfo } from '@/lib/daisy/types'
 
 function useAdminDiaries() {
   const { authHeader } = useAuth()
@@ -93,8 +93,10 @@ export default function AdminDaisyPage() {
       return res.json() as Promise<GenerateDiaryResult>
     },
     onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: ['admin-daisy-diaries'] })
-      qc.invalidateQueries({ queryKey: ['daisy-diaries'] })
+      if (data.saved) {
+        qc.invalidateQueries({ queryKey: ['admin-daisy-diaries'] })
+        qc.invalidateQueries({ queryKey: ['daisy-diaries'] })
+      }
       setGenerateResult(data)
     },
     onError: (err) => {
@@ -263,34 +265,7 @@ export default function AdminDaisyPage() {
         )}
 
         {generateResult && (
-          <div className="rounded-xl p-3 border bg-green-50 border-green-200 space-y-3">
-            <p className="font-bold text-green-700 text-sm">✅ Diário gerado com sucesso!</p>
-
-            {/* Dados do diário */}
-            <div className="text-xs text-dark space-y-0.5">
-              <p><span className="font-semibold text-mid-gray">Título:</span> {generateResult.diary.title}</p>
-              {generateResult.diary.subtitle && (
-                <p><span className="font-semibold text-mid-gray">Subtítulo:</span> {generateResult.diary.subtitle}</p>
-              )}
-              <p><span className="font-semibold text-mid-gray">Data:</span> {formatDate(generateResult.diary.createdAt)}</p>
-            </div>
-
-            {/* Diagnóstico do contexto */}
-            <div className="rounded-lg bg-white border border-green-200 p-2 text-xs font-mono text-mid-gray space-y-0.5">
-              <p className="font-semibold text-dark text-[10px] uppercase tracking-wide mb-1">Daisy Context</p>
-              <p>Recent Results: <span className={generateResult.recentResultsCount > 0 ? 'text-green-700 font-bold' : 'text-gray-400'}>{generateResult.recentResultsCount}</span>{generateResult.hasRecentResults ? ' ✅' : ''}</p>
-              <p>Upcoming Games: <span className="text-dark font-semibold">{generateResult.upcomingGamesCount}</span></p>
-              <p>News Highlights: <span className="text-dark font-semibold">{generateResult.newsHighlightsCount}</span></p>
-              <p>Execution: <span className="text-dark font-semibold">{formatMs(generateResult.executionMs)}</span></p>
-            </div>
-
-            {/* Botão visualizar */}
-            <Link href={`/daisy/${generateResult.diary.id}`}>
-              <Button variant="secondary" fullWidth>
-                Visualizar Diário →
-              </Button>
-            </Link>
-          </div>
+          <GenerateResultPanel result={generateResult} formatDate={formatDate} formatMs={formatMs} />
         )}
       </Card>
 
@@ -399,6 +374,270 @@ export default function AdminDaisyPage() {
 }
 
 // ─── Sub-componentes ──────────────────────────────────────────────────────────
+
+// ─── Painel de resultado + debug da geração ──────────────────────────────────
+
+function GenerateResultPanel({
+  result,
+  formatDate,
+  formatMs,
+}: {
+  result: GenerateDiaryResult
+  formatDate: (iso: string) => string
+  formatMs: (ms: number) => string
+}) {
+  const [showDebug, setShowDebug] = useState(false)
+
+  const borderColor = result.saved ? 'border-green-200' : 'border-amber-300'
+  const bgColor     = result.saved ? 'bg-green-50'       : 'bg-amber-50'
+
+  return (
+    <div className={`rounded-xl p-3 border ${bgColor} ${borderColor} space-y-3`}>
+      {result.saved ? (
+        <p className="font-bold text-green-700 text-sm">✅ Diário gerado com sucesso!</p>
+      ) : (
+        <p className="font-bold text-amber-700 text-sm">⚠️ Diário NÃO salvo — {result.validationError}</p>
+      )}
+
+      {/* Dados do diário (só quando salvo) */}
+      {result.saved && result.diary && (
+        <div className="text-xs text-dark space-y-0.5">
+          <p><span className="font-semibold text-mid-gray">Título:</span> {result.diary.title}</p>
+          {result.diary.subtitle && (
+            <p><span className="font-semibold text-mid-gray">Subtítulo:</span> {result.diary.subtitle}</p>
+          )}
+          <p><span className="font-semibold text-mid-gray">Data:</span> {formatDate(result.diary.createdAt)}</p>
+        </div>
+      )}
+
+      {/* Resumo de contexto */}
+      <div className="rounded-lg bg-white border border-gray-200 p-2 text-xs font-mono text-mid-gray space-y-0.5">
+        <p className="font-semibold text-dark text-[10px] uppercase tracking-wide mb-1">Contexto enviado à IA</p>
+        <p>
+          Resultados recentes:{' '}
+          <span className={result.recentResultsCount > 0 ? 'text-green-700 font-bold' : 'text-red-500 font-bold'}>
+            {result.recentResultsCount}
+          </span>
+          {result.hasRecentResults ? ' ✅' : ' ❌'}
+        </p>
+        <p>Jogos futuros: <span className="text-dark font-semibold">{result.upcomingGamesCount}</span></p>
+        <p>Notícias: <span className="text-dark font-semibold">{result.newsHighlightsCount}</span></p>
+        <p>Execução: <span className="text-dark font-semibold">{formatMs(result.executionMs)}</span></p>
+        <p className={result.debug.validationPassed ? 'text-green-700' : 'text-red-600 font-semibold'}>
+          Validação: {result.debug.validationNote}
+        </p>
+      </div>
+
+      {/* Ver diário (só quando salvo) */}
+      {result.saved && result.diary && (
+        <Link href={`/daisy/${result.diary.id}`}>
+          <Button variant="secondary" fullWidth>Visualizar Diário →</Button>
+        </Link>
+      )}
+
+      {/* Toggle debug */}
+      <button
+        onClick={() => setShowDebug((v) => !v)}
+        className="w-full text-left text-xs font-mono text-mid-gray hover:text-dark border border-dashed border-gray-300 rounded-lg px-3 py-2"
+      >
+        {showDebug ? '▲ Fechar debug da geração' : '▼ Ver debug da geração'}
+      </button>
+
+      {showDebug && <DebugPanel debug={result.debug} />}
+    </div>
+  )
+}
+
+// ─── Debug Panel ──────────────────────────────────────────────────────────────
+
+function DebugSection({
+  title,
+  children,
+  defaultOpen = false,
+}: {
+  title: string
+  children: React.ReactNode
+  defaultOpen?: boolean
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div className="border border-gray-200 rounded-lg overflow-hidden">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 text-xs font-semibold text-dark hover:bg-gray-100"
+      >
+        <span>{title}</span>
+        <span className="text-mid-gray text-[10px]">{open ? '▲' : '▼'}</span>
+      </button>
+      {open && <div className="p-3 bg-white">{children}</div>}
+    </div>
+  )
+}
+
+function JsonBlock({ data, label }: { data: unknown; label?: string }) {
+  const [copied, setCopied] = useState(false)
+  const text = typeof data === 'string' ? data : JSON.stringify(data, null, 2)
+  const copy = () => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+  return (
+    <div className="relative">
+      {label && <p className="text-[10px] font-semibold text-mid-gray uppercase tracking-wide mb-1">{label}</p>}
+      <button
+        onClick={copy}
+        className="absolute top-1 right-1 text-[9px] bg-gray-700 text-gray-200 hover:bg-gray-600 px-1.5 py-0.5 rounded z-10"
+      >
+        {copied ? '✓ copiado' : 'copiar'}
+      </button>
+      <pre className="text-[10px] font-mono overflow-auto max-h-72 bg-gray-950 text-green-300 rounded-lg p-3 pr-16 leading-relaxed whitespace-pre-wrap break-all">
+        {text}
+      </pre>
+    </div>
+  )
+}
+
+function DebugPanel({ debug }: { debug: DiaryDebugInfo }) {
+  return (
+    <div className="space-y-2">
+      {/* 1. Resumo */}
+      <DebugSection title="1. Resumo do contexto" defaultOpen>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] font-mono">
+          <div><span className="text-mid-gray">Modelo:</span> {debug.model}</div>
+          <div><span className="text-mid-gray">Gerado em:</span> {debug.generatedAt?.slice(0, 19)}Z</div>
+          <div className={debug.recentResultEntries.length > 0 ? 'text-green-700 font-bold' : 'text-red-600 font-bold'}>
+            Resultados recentes: {debug.recentResultEntries.length} {debug.recentResultEntries.length > 0 ? '✅' : '❌'}
+          </div>
+          <div><span className="text-mid-gray">Jogos futuros:</span> {debug.upcomingGamesDebug.length}</div>
+          <div><span className="text-mid-gray">Notícias:</span> {debug.newsItems.length}</div>
+          <div><span className="text-mid-gray">Prompts carregados:</span> {debug.promptsLoadedCount}</div>
+          <div><span className="text-mid-gray">Jogos analisados (raw):</span> {debug.gamesRawCount}</div>
+          <div><span className="text-mid-gray">Resultados (raw):</span> {debug.resultsRawCount}</div>
+          <div className="col-span-2 mt-1">
+            <span className="text-mid-gray">Corte de tempo:</span>{' '}
+            <span className="text-dark">{debug.cutoffLabel}</span>
+          </div>
+          {debug.lastDiaryDate && (
+            <div className="col-span-2">
+              <span className="text-mid-gray">Último diário:</span>{' '}
+              <span className="text-dark">{debug.lastDiaryDate.slice(0, 19)}Z</span>
+            </div>
+          )}
+          <div className={`col-span-2 mt-1 font-semibold ${debug.validationPassed ? 'text-green-700' : 'text-red-700'}`}>
+            Validação: {debug.validationNote}
+          </div>
+        </div>
+      </DebugSection>
+
+      {/* 2. Todos os jogos analisados */}
+      <DebugSection title={`2. Jogos analisados (${debug.allGamesAnalyzed.length} raw)`}>
+        <div className="space-y-0.5">
+          {debug.allGamesAnalyzed.length === 0 && (
+            <p className="text-xs text-red-600 font-medium">⚠️ Nenhum jogo retornado pelo SYDLE.</p>
+          )}
+          {debug.allGamesAnalyzed.map((g, i) => (
+            <div
+              key={i}
+              className={`text-[10px] font-mono flex flex-wrap gap-x-3 gap-y-0 border-b border-gray-100 py-0.5 ${
+                g.withinWindow ? 'bg-green-50' : ''
+              }`}
+            >
+              <span className={`font-semibold ${g.withinWindow ? 'text-green-700' : g.hasResult && !g.isInFuture ? 'text-amber-600' : 'text-mid-gray'}`}>
+                {g.country1} vs {g.country2}
+              </span>
+              <span>{g.hasResult ? `✓ ${g.result1}×${g.result2}` : '✗ sem resultado'}</span>
+              <span className={g.isInFuture ? 'text-blue-500' : 'text-gray-500'}>
+                {g.isInFuture ? '🔵 futuro' : '⚫ passado'}
+              </span>
+              <span className={g.withinWindow ? 'text-green-600 font-bold' : g.hasResult && !g.isInFuture ? 'text-amber-500' : 'text-gray-400'}>
+                {g.withinWindow ? '✅ na janela' : g.hasResult && !g.isInFuture ? '⚠️ fora da janela' : '—'}
+              </span>
+              <span className="text-gray-400">
+                {g.gameDateMs ? new Date(g.gameDateMs).toISOString().slice(0, 16) : `⚠️ NaN (raw: ${String(g.gameDateRaw).slice(0, 20)})`}
+              </span>
+            </div>
+          ))}
+        </div>
+      </DebugSection>
+
+      {/* 3. Resultados recentes enviados */}
+      <DebugSection title={`3. Resultados recentes enviados à IA (${debug.recentResultEntries.length})`}>
+        {debug.recentResultEntries.length === 0 ? (
+          <p className="text-xs text-red-600 font-medium">⚠️ Nenhum resultado recente — verifique a seção 2 para entender o motivo.</p>
+        ) : (
+          <JsonBlock data={debug.recentResultEntries} />
+        )}
+      </DebugSection>
+
+      {/* 4. Jogos futuros */}
+      <DebugSection title={`4. Jogos futuros enviados à IA (${debug.upcomingGamesDebug.length})`}>
+        {debug.upcomingGamesDebug.length === 0 ? (
+          <p className="text-xs text-amber-600">Nenhum jogo futuro encontrado.</p>
+        ) : (
+          <JsonBlock data={debug.upcomingGamesDebug} />
+        )}
+      </DebugSection>
+
+      {/* 5. Notícias */}
+      <DebugSection title={`5. Notícias enviadas (${debug.newsItems.length})`}>
+        {debug.newsItems.length === 0 ? (
+          <p className="text-xs text-mid-gray italic">Nenhuma notícia coletada.</p>
+        ) : (
+          <div className="space-y-2">
+            {debug.newsItems.map((n, i) => (
+              <div key={i} className="text-xs border-b border-gray-100 pb-2">
+                <p className="font-semibold text-dark">[{i + 1}] {n.title}</p>
+                <p className="text-mid-gray mt-0.5 leading-snug">{n.description}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </DebugSection>
+
+      {/* 6. Prompts */}
+      <DebugSection title={`6. Prompts carregados (${debug.promptsLoaded.length})`}>
+        <div className="space-y-3">
+          {debug.promptsLoaded.map((p, i) => (
+            <div key={i} className="text-xs">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <span className="font-mono font-bold text-dark">{p.identifier}</span>
+                <span className="text-mid-gray text-[10px]">v{p.version}</span>
+                <Badge color={p.active ? 'green' : 'gray'}>{p.active ? 'Ativo' : 'Inativo'}</Badge>
+              </div>
+              <p className="font-mono text-[10px] text-mid-gray bg-gray-50 rounded p-2 leading-relaxed">
+                {p.preview}…
+              </p>
+            </div>
+          ))}
+          {debug.promptsLoaded.length === 0 && (
+            <p className="text-xs text-red-600 font-medium">⚠️ Nenhum prompt carregado do SYDLE.</p>
+          )}
+        </div>
+      </DebugSection>
+
+      {/* 7. Payload final enviado à IA */}
+      <DebugSection title="7. Payload final enviado à IA (user message)">
+        <JsonBlock data={debug.finalPrompt} label="Prompt do usuário (system prompt separado)" />
+      </DebugSection>
+
+      {/* 8. Resposta bruta da IA */}
+      <DebugSection title="8. Resposta bruta da IA (antes do parse)">
+        <JsonBlock data={debug.rawAIResponse} />
+      </DebugSection>
+
+      {/* 9. Payload salvo no SYDLE */}
+      <DebugSection title="9. Payload enviado ao _create de daisyDiary">
+        {debug.savedPayload ? (
+          <JsonBlock data={debug.savedPayload} />
+        ) : (
+          <p className="text-xs text-red-600 font-semibold">Diário não foi salvo (validação bloqueou).</p>
+        )}
+      </DebugSection>
+    </div>
+  )
+}
 
 function StatCell({ label, value }: { label: string; value: string }) {
   return (
