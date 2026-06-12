@@ -21,7 +21,7 @@ export function BottomNav() {
 
   const items = [
     ...NAV_ITEMS,
-    ...(user?.isAdmin ? [{ href: '/admin/resultados', label: 'Admin', icon: SettingsIcon }] : []),
+    ...(user?.isAdmin ? [{ href: '/admin', label: 'Admin', icon: SettingsIcon }] : []),
   ]
 
   return (
