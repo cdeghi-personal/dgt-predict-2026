@@ -63,7 +63,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
     return NextResponse.json(raw)
   } catch (err) {
-    console.error('[guesses PUT]', err)
-    return NextResponse.json({ error: 'Erro ao atualizar palpite.' }, { status: 500 })
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[guesses PUT]', msg)
+    return NextResponse.json({ error: 'Erro ao atualizar palpite.', detail: msg }, { status: 500 })
   }
 }
