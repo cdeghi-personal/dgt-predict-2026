@@ -27,12 +27,17 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       return NextResponse.json({ error: 'Placar obrigatório.' }, { status: 400 })
     }
 
-    // Resolve o jogo vinculado ao palpite e valida o horário
+    // Busca o palpite atual para montar o _update completo
     const guessRaw = await sydleCall(SYDLE_PACKAGE, SYDLE_CLASS.guesses, SYDLE_METHOD.search, {
       query: { term: { _id: id } }, size: 1,
     }, token).then((r) => parseSearchFirst<SydleGuess>(r)).catch(() => null)
 
-    if (guessRaw?.game?._id) {
+    if (!guessRaw) {
+      return NextResponse.json({ error: 'Palpite não encontrado.' }, { status: 404 })
+    }
+
+    // Valida se o jogo já começou
+    if (guessRaw.game?._id) {
       const game = await sydleCall(SYDLE_PACKAGE, SYDLE_CLASS.games, SYDLE_METHOD.search, {
         query: { term: { _id: guessRaw.game._id } }, size: 1,
       }, token).then((r) => parseSearchFirst<SydleGame>(r)).catch(() => null)
@@ -48,8 +53,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       SYDLE_METHOD.update,
       {
         _id: id,
-        user: guessRaw?.user ? { _id: guessRaw.user._id } : undefined,
-        game: { _id: guessRaw?.game._id },
+        user: guessRaw.user ? { _id: guessRaw.user._id } : undefined,
+        game: { _id: guessRaw.game._id },
         result1: Number(result1),
         result2: Number(result2),
       },
