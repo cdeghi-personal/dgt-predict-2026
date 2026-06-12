@@ -10,7 +10,8 @@ import { GuessForm } from '@/components/features/GuessForm'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRanking } from '@/hooks/useRanking'
 import { useTomorrowMatches, useTodayMatches } from '@/hooks/useMatches'
-import { useMyGuesses } from '@/hooks/useGuesses'
+import { useMyGuesses, useMatchDistributions } from '@/hooks/useGuesses'
+import { isGuessingClosed } from '@/lib/utils/dates'
 import { calculatePoints } from '@/lib/utils/scoring'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -44,6 +45,11 @@ export default function DashboardPage() {
   const guessMap = new Map(myGuesses?.map((g) => [g.matchId, g]))
   const pendingTomorrow = tomorrowMatches?.filter((m) => !guessMap.has(m.id)) ?? []
   const upcomingMatches = [...(todayMatches ?? []), ...(tomorrowMatches ?? [])].slice(0, 3)
+
+  const closedUpcomingIds = upcomingMatches
+    .filter((m) => isGuessingClosed(m.matchDate, m.matchTime))
+    .map((m) => m.id)
+  const { data: distributions } = useMatchDistributions(closedUpcomingIds)
 
   return (
     <div className="space-y-6">
@@ -112,7 +118,7 @@ export default function DashboardPage() {
                   {guessingMatch?.id === match.id ? (
                     <GuessForm match={match} existingGuess={guess} onClose={() => setGuessingMatch(null)} />
                   ) : (
-                    <MatchCard match={match} guess={guess} onGuess={() => setGuessingMatch(match)} />
+                    <MatchCard match={match} guess={guess} onGuess={() => setGuessingMatch(match)} guessDistribution={distributions?.[match.id] ?? null} />
                   )}
                 </div>
               )

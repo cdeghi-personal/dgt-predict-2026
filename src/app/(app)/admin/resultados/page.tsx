@@ -10,8 +10,9 @@ import { CountryFlag } from '@/components/features/CountryFlag'
 import { PageLoader } from '@/components/ui/LoadingSpinner'
 import { useAuth } from '@/contexts/AuthContext'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { formatMatchDate, PHASE_LABELS } from '@/lib/utils/dates'
-import type { Match } from '@/lib/types'
+import { formatMatchDate, PHASE_LABELS, isGuessingClosed } from '@/lib/utils/dates'
+import { useMatchDistributions } from '@/hooks/useGuesses'
+import type { Match, MatchGuessDistribution } from '@/lib/types'
 
 function useAdminMatches() {
   const { authHeader } = useAuth()
@@ -39,6 +40,12 @@ export default function AdminResultadosPage() {
   const pending = useMemo(() => matches?.filter((m) => m.status !== 'FINISHED') ?? [], [matches])
   const finished = useMemo(() => matches?.filter((m) => m.status === 'FINISHED') ?? [], [matches])
 
+  const closedMatchIds = useMemo(
+    () => matches?.filter((m) => isGuessingClosed(m.matchDate, m.matchTime)).map((m) => m.id) ?? [],
+    [matches],
+  )
+  const { data: distributions } = useMatchDistributions(closedMatchIds)
+
   if (!user?.isAdmin) return null
   if (isLoading) return <PageLoader />
 
@@ -57,7 +64,7 @@ export default function AdminResultadosPage() {
           <h2 className="text-xs font-bold text-mid-gray uppercase tracking-wide mb-3">Aguardando Resultado</h2>
           <div className="space-y-3">
             {pending.map((match) => (
-              <ResultEntryCard key={match.id} match={match} />
+              <ResultEntryCard key={match.id} match={match} distribution={distributions?.[match.id] ?? null} />
             ))}
           </div>
         </section>
@@ -69,7 +76,7 @@ export default function AdminResultadosPage() {
           <h2 className="text-xs font-bold text-mid-gray uppercase tracking-wide mb-3">Resultados Registrados</h2>
           <div className="space-y-3">
             {finished.map((match) => (
-              <FinishedMatchCard key={match.id} match={match} />
+              <FinishedMatchCard key={match.id} match={match} distribution={distributions?.[match.id] ?? null} />
             ))}
           </div>
         </section>
@@ -88,7 +95,20 @@ export default function AdminResultadosPage() {
 
 // ─── Card para registrar resultado (jogo sem resultado ainda) ─────────────────
 
-function ResultEntryCard({ match }: { match: Match }) {
+function DistRow({ dist }: { dist: MatchGuessDistribution | null | undefined }) {
+  if (!dist || dist.totalGuesses === 0) return null
+  const max = Math.max(dist.country1WinPercentage, dist.drawPercentage, dist.country2WinPercentage)
+  const cls = (v: number) => v === max ? 'text-primary font-bold' : 'text-mid-gray'
+  return (
+    <div className="flex items-center justify-between text-xs mt-2 px-1">
+      <span className={cls(dist.country1WinPercentage)}>{dist.country1WinPercentage}%</span>
+      <span className={`${cls(dist.drawPercentage)} text-center`}>{dist.drawPercentage}%&nbsp;empate</span>
+      <span className={cls(dist.country2WinPercentage)}>{dist.country2WinPercentage}%</span>
+    </div>
+  )
+}
+
+function ResultEntryCard({ match, distribution }: { match: Match; distribution?: MatchGuessDistribution | null }) {
   const [score1, setScore1] = useState('')
   const [score2, setScore2] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -133,7 +153,7 @@ function ResultEntryCard({ match }: { match: Match }) {
         </span>
       </div>
 
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center gap-3 mb-1">
         <div className="flex items-center gap-2 flex-1">
           <CountryFlag flag={match.country1.flag} name={match.country1.name} size="sm" />
           <span className="text-sm font-semibold text-dark truncate">{match.country1.name}</span>
@@ -144,8 +164,9 @@ function ResultEntryCard({ match }: { match: Match }) {
           <CountryFlag flag={match.country2.flag} name={match.country2.name} size="sm" />
         </div>
       </div>
+      <DistRow dist={distribution} />
 
-      <div className="flex items-center gap-3 mb-3">
+      <div className="flex items-center gap-3 mb-3 mt-3">
         <input
           type="number"
           min={0}
@@ -185,7 +206,7 @@ function ResultEntryCard({ match }: { match: Match }) {
 
 // ─── Card de jogo já finalizado (com opção de corrigir o placar) ──────────────
 
-function FinishedMatchCard({ match }: { match: Match }) {
+function FinishedMatchCard({ match, distribution }: { match: Match; distribution?: MatchGuessDistribution | null }) {
   const [editing, setEditing] = useState(false)
   const [score1, setScore1] = useState(String(match.scoreCountry1 ?? ''))
   const [score2, setScore2] = useState(String(match.scoreCountry2 ?? ''))
@@ -243,6 +264,7 @@ function FinishedMatchCard({ match }: { match: Match }) {
             Editar
           </button>
         </div>
+        <DistRow dist={distribution} />
       </Card>
     )
   }
