@@ -96,6 +96,14 @@ export interface DiaryDebugInfo {
     result1: number; result2: number
     group: string; phase: string; finishedAt: string
   }>
+  // Resultados fora da janela — enviados apenas como referência histórica
+  olderResultEntries: Array<{
+    country1: string; country2: string
+    result1: number; result2: number
+    group: string; phase: string; finishedAt: string
+  }>
+  // Subset de olderResultEntries que aparece em diários recentes — IA avisada para não repetir
+  recentlyCommentedGames: string[]
   upcomingGamesDebug: Array<{
     gameId: string; country1: string; country2: string; gameDateMs: number | null
   }>

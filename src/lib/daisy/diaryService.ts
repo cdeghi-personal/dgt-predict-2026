@@ -96,6 +96,7 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
   // Antes: iterava jogos e buscava resultado → perdia jogos fora dos top-50 por data
   // Agora: itera resultados e resolve o jogo via gameMap (cobre todos os 200 jogos)
   const recentResultEntries: RecentResultEntry[] = []
+  const olderResultEntries: RecentResultEntry[] = []
   const allFinishedForContext: string[] = []
   const resultsDebug: ResultDebugEntry[] = []
 
@@ -127,7 +128,18 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
       `${countryName(g.country1?._id)} ${r.result1} x ${r.result2} ${countryName(g.country2?._id)}`
     )
 
-    if (!withinWindow) continue
+    if (!withinWindow) {
+      olderResultEntries.push({
+        country1:   countryName(g.country1?._id),
+        country2:   countryName(g.country2?._id),
+        result1:    r.result1,
+        result2:    r.result2,
+        group:      g.group ?? '',
+        phase:      g.phase ?? '',
+        finishedAt: brtLabel(gameTs),
+      })
+      continue
+    }
 
     recentResultEntries.push({
       country1:   countryName(g.country1?._id),
@@ -142,6 +154,20 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
 
   const hasRecentResults   = recentResultEntries.length > 0
   const recentResultsCount = recentResultEntries.length
+
+  // ── Jogos já comentados em diários anteriores (subset de olderResultEntries) ──
+  const recentDiaryTexts = recentDiaries.map((d) =>
+    `${d.title ?? ''} ${d.subtitle ?? ''} ${d.content ?? ''}`.toLowerCase()
+  )
+  const recentlyCommentedGames = olderResultEntries
+    .filter((e) =>
+      recentDiaryTexts.some(
+        (text) =>
+          text.includes(e.country1.toLowerCase()) ||
+          text.includes(e.country2.toLowerCase())
+      )
+    )
+    .map((e) => `${e.country1} ${e.result1}×${e.result2} ${e.country2}`)
 
   // ── Debug: visão jogo-primeiro (top 50 por data DESC) ───────────────────────
   // Mantida para diagnóstico — mostra se algum jogo tem data NaN ou problemas similares
@@ -255,6 +281,12 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
 
   const markdownInstruction = `\nRetorne o conteúdo formatado em Markdown com seções usando ## para subtítulos, listas com *, negrito com ** e separadores com ---. Use seu próprio estilo — não cite portais, fontes ou sites. Escreva como se as ideias fossem suas, em primeira pessoa.\n`
 
+  const recentlyCommentedContext = recentlyCommentedGames.length > 0
+    ? '\n\nTemas já abordados recentemente:\n' +
+      recentlyCommentedGames.map((g) => `- ${g}`).join('\n') +
+      '\n\nEvite reutilizar estes jogos como assunto principal.'
+    : ''
+
   // ── Prompt final ─────────────────────────────────────────────────────────────
   const diaryUserMessage = [
     diaryPrompt,
@@ -266,6 +298,7 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
     `\n\nPróximos jogos:\n${upcomingContext}`,
     `\n\nTop 10 ranking:\n${rankingContext}`,
     newsContext,
+    recentlyCommentedContext,
     previousPostsContext,
     '\n\nRetorne APENAS JSON válido com os campos: title (string), subtitle (string), content (string com Markdown).',
   ].join('')
@@ -314,6 +347,8 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
     resultsDebug,
     allGamesAnalyzed,
     recentResultEntries,
+    olderResultEntries,
+    recentlyCommentedGames,
     upcomingGamesDebug,
     newsUrlResults:      newsResult.urlResults,
     newsSummaryPreview:  newsResult.summaryPreview,

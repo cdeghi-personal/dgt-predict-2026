@@ -604,13 +604,72 @@ function DebugPanel({ debug }: { debug: DiaryDebugInfo }) {
         </div>
       </DebugSection>
 
-      {/* 4. Resultados recentes enviados à IA */}
-      <DebugSection title={`4. Resultados recentes enviados à IA (${debug.recentResultEntries.length})`}>
-        {debug.recentResultEntries.length === 0 ? (
-          <p className="text-xs text-red-600 font-medium">⚠️ Nenhum resultado recente — verifique a seção 2 para entender o motivo.</p>
-        ) : (
-          <JsonBlock data={debug.recentResultEntries} />
-        )}
+      {/* 4. Resultados enviados à IA — TODAYS vs OLDER */}
+      <DebugSection
+        title={`4. Resultados enviados à IA — TODAYS: ${debug.recentResultEntries.length} | OLDER: ${debug.olderResultEntries.length} | Comentados: ${debug.recentlyCommentedGames.length}`}
+        defaultOpen={debug.recentResultEntries.length > 0 || debug.recentlyCommentedGames.length > 0}
+      >
+        <div className="space-y-3">
+          {/* TODAYS_RESULTS */}
+          <div className="rounded-lg border border-green-300 bg-green-50 p-2.5 space-y-1.5">
+            <p className="text-[10px] font-bold text-green-800 uppercase tracking-wide">
+              TODAYS_RESULTS — {debug.recentResultEntries.length} jogo(s) — IA obrigada a comentar
+            </p>
+            {debug.recentResultEntries.length === 0 ? (
+              <p className="text-[11px] text-red-600 font-medium">⚠️ Nenhum — verifique a seção 2 para entender o motivo.</p>
+            ) : (
+              <div className="space-y-0.5">
+                {debug.recentResultEntries.map((e, i) => (
+                  <p key={i} className="text-[11px] font-mono text-green-900">
+                    ✅ {e.country1} {e.result1}×{e.result2} {e.country2}
+                    <span className="text-green-600 ml-2">{e.phase} {e.group ? `· Grupo ${e.group}` : ''} · {e.finishedAt}</span>
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* OLDER_RESULTS_REFERENCE_ONLY */}
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 space-y-1.5">
+            <p className="text-[10px] font-bold text-amber-800 uppercase tracking-wide">
+              OLDER_RESULTS_REFERENCE_ONLY — {debug.olderResultEntries.length} jogo(s) — apenas contexto histórico
+            </p>
+            {debug.olderResultEntries.length === 0 ? (
+              <p className="text-[11px] text-mid-gray italic">Nenhum resultado fora da janela.</p>
+            ) : (
+              <div className="space-y-0.5">
+                {debug.olderResultEntries.map((e, i) => {
+                  const label = `${e.country1} ${e.result1}×${e.result2} ${e.country2}`
+                  const alreadyCommented = debug.recentlyCommentedGames.includes(label)
+                  return (
+                    <p key={i} className={`text-[11px] font-mono ${alreadyCommented ? 'text-red-700' : 'text-amber-900'}`}>
+                      {alreadyCommented ? '🔁' : '—'} {label}
+                      {alreadyCommented && <span className="ml-1 text-red-500 font-bold">(já comentado)</span>}
+                      <span className="text-amber-600 ml-2">{e.finishedAt}</span>
+                    </p>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Temas já abordados recentemente */}
+          {debug.recentlyCommentedGames.length > 0 && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-2.5 space-y-1.5">
+              <p className="text-[10px] font-bold text-red-800 uppercase tracking-wide">
+                Temas já abordados recentemente — injetado no prompt
+              </p>
+              <div className="space-y-0.5">
+                {debug.recentlyCommentedGames.map((g, i) => (
+                  <p key={i} className="text-[11px] font-mono text-red-700">🔁 {g}</p>
+                ))}
+              </div>
+              <p className="text-[10px] text-red-600 italic mt-1">
+                A IA recebeu instrução: &ldquo;Evite reutilizar estes jogos como assunto principal.&rdquo;
+              </p>
+            </div>
+          )}
+        </div>
       </DebugSection>
 
       {/* 5. Jogos futuros */}

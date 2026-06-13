@@ -33,21 +33,20 @@ X-Explorer-Account-Token: <org>
 Content-Type: application/json
 ```
 
-### `_patch` — formato JSON Patch
+### `_update` — método preferido para escrita
 
-O SYDLE usa JSON Patch (RFC 6902) para atualizações parciais:
+Usar `_update` com o objeto completo para todas as atualizações:
 
 ```ts
-sydleCall(pkg, cls, '_patch', {
+sydleCall(pkg, cls, '_update', {
   _id: objectId,
-  _operationsList: [
-    { op: 'replace', path: '/fieldName', value: newValue },
-    { op: 'replace', path: '/otherField', value: otherValue },
-  ],
+  field1: value1,
+  field2: value2,
+  // todos os campos necessários
 }, token)
 ```
 
-**Nunca** enviar campos diretos como `{ _id, Active: true }` — o SYDLE ignora silenciosamente. Sempre usar `_operationsList`.
+**Atenção:** `_patch` aceita a requisição e retorna 200 mas **não persiste** os dados de forma confiável nesta aplicação. Todo código novo deve usar `_update` com busca prévia do objeto quando necessário. Nunca enviar campos diretos em `_patch` sem `_operationsList`, e mesmo com `_operationsList` preferir `_update`.
 
 ### Identificador da aplicação
 
@@ -124,6 +123,7 @@ Arquivos em `/public/`:
 
 - `guess` existente + jogo não finalizado → link discreto `✏️ alterar` dentro da coluna central (abaixo de "seu palpite"), **não** botão full-width no rodapé
 - Jogo sem palpite → botão amarelo `⚽ Dar Palpite` full-width
+- `onViewGuesses?: () => void` — quando fornecido e `isGuessingClosed`, exibe botão "👥 Ver palpites dos participantes" abaixo do CTA principal
 - **Atenção**: `guess.points` é `null` por padrão (não vem do SYDLE). Calcular antes de passar:
 
 ```tsx
@@ -139,6 +139,11 @@ O badge `+N pts` só aparece quando `guess.points != null && isFinished`.
 ### `GuessForm` (`src/components/features/GuessForm.tsx`)
 
 Formulário modal para registrar/alterar palpite. Recebe `match` + `existingGuess`.
+Campos de placar iniciam **vazios (null)** para novos palpites — validação impede submit com campos em branco.
+
+### `MatchGuessesModal` (`src/components/features/MatchGuessesModal.tsx`)
+
+Bottom sheet (mobile) / modal centralizado (desktop) que exibe os palpites de todos os participantes de uma partida após o fechamento do jogo. Recebe `match`, `isOpen`, `onClose`. Busca via `GET /api/matches/[id]/guesses`. Exibe avatar especial + badge "IA DGT" para a Daisy. Se o jogo ainda não fechou, mostra estado bloqueado (não faz a chamada).
 
 ### `RankingTable` (`src/components/features/RankingTable.tsx`)
 
@@ -211,8 +216,9 @@ src/
       daisy/generate-diary/route.ts     # POST — gera diário completo, retorna GenerateDiaryResult
   components/
     features/
-      MatchCard.tsx                     # Card de jogo (com/sem palpite)
-      GuessForm.tsx                     # Formulário de palpite
+      MatchCard.tsx                     # Card de jogo (com/sem palpite, com botão "Ver palpites" pós-fechamento)
+      GuessForm.tsx                     # Formulário de palpite (placar inicia vazio, valida antes de enviar)
+      MatchGuessesModal.tsx             # Modal de palpites dos participantes (bloqueado se jogo aberto)
       CountryFlag.tsx                   # Bandeira do país
       RankingTable.tsx                  # Tabela de ranking (Daisy destacada em roxo)
     layout/
@@ -238,10 +244,12 @@ src/
       constants.ts                      # DAISY_USER_ID, DAISY_USER_NAME, DAISY_PROMPT_IDENTIFIERS
       aiClient.ts                       # callOpenAI() via OpenAI API (server-side only)
       promptRepository.ts               # getAllPrompts, getPromptByIdentifier — SYDLE daisyPrompt
-      diaryRepository.ts                # getActiveDiaries, createDiary, toggleDiaryActive — SYDLE daisyDiary
-      guessService.ts                   # saveDaisyGuesses — cria palpites no SYDLE como usuário Daisy
+      diaryRepository.ts                # getActiveDiaries, getMostRecentDiaries, createDiary, toggleDiaryActive, deleteDiary
+      guessService.ts                   # saveDaisyGuesses — cria/atualiza palpites via _update
       newsService.ts                    # fetchAndSummarizeNews (5 fontes fixas), buildNewsContext
-      diaryService.ts                   # generateDailyDiary — orquestra geração completa
+      matchAnalysisService.ts           # analyzeUpcomingMatches — análise intermediária por jogo (DAISY_MATCH_ANALYSIS)
+      diaryService.ts                   # generateDailyDiary — orquestra geração + injeta últimos 3 posts como contexto
+      guessGenerationService.ts         # generateAndSaveDaisyGuesses — geração autônoma de palpites (4 fases)
   contexts/
     AuthContext.tsx                     # useAuth, login/logout
 ```
@@ -267,7 +275,11 @@ src/
 ## Regras de prazo de palpite
 
 `isGuessingClosed(matchDate, matchTime)` retorna `true` quando o horário de início do jogo passou.
-Palpites fecham exatamente no kickoff (horário UTC armazenado no SYDLE).
+Palpites fecham exatamente no kickoff.
+
+**Timezone:** o SYDLE armazena timestamps em UTC. `parseSydleDate` em `mappers.ts` converte para **Brasília (UTC-3)** antes de extrair `matchDate` e `matchTime`. `isGuessingClosed` usa offset `-03:00` ao construir a ISO string para comparação. Nunca usar `Z` (UTC) nessas funções — os valores de `matchDate`/`matchTime` no objeto `Match` são sempre BRT.
+
+O mesmo se aplica à rota server-side `GET /api/matches/[id]/guesses` — usa `parseSydleGameDate` com a mesma conversão BRT.
 
 ## Fase de grupos — labels
 
@@ -312,16 +324,20 @@ DAISY_PACKAGE=predict2026          # Pacote SYDLE das classes Daisy (padrão: pr
 - `tytle` — título (typo: não é "title")
 - `subtytle` — subtítulo (typo: não é "subtitle")
 - `content` — conteúdo da entrada
-- `Active` — ativo/inativo (A maiúsculo)
+- `active` — ativo/inativo (**a minúsculo** — diferente de `daisyPrompt.Active`)
+- `date` — data de referência da edição (campo opcional, formato ISO)
+
+Entradas são criadas com `active: false` — o admin revisa e ativa manualmente.
 
 ### Identificadores de prompts SYDLE
 
 ```ts
 DAISY_PROMPT_IDENTIFIERS = {
-  persona:     'DAISY_SYSTEM_PERSONA',   // Personalidade da Daisy
-  diary:       'DAISY_DAILY_DIARY',      // Prompt de geração do diário
-  guesses:     'DAISY_DAILY_GUESSES',    // Prompt de geração de palpites
-  newsSummary: 'DAISY_NEWS_SUMMARY',     // Prompt de resumo de notícias
+  persona:       'DAISY_SYSTEM_PERSONA',   // Personalidade da Daisy
+  diary:         'DAISY_DAILY_DIARY',      // Prompt de geração do diário
+  guesses:       'DAISY_DAILY_GUESSES',    // Prompt de geração de palpites
+  newsSummary:   'DAISY_NEWS_SUMMARY',     // Prompt de resumo de notícias
+  matchAnalysis: 'DAISY_MATCH_ANALYSIS',   // Análise intermediária por jogo (etapa entre notícias e palpites)
 }
 ```
 
@@ -334,15 +350,53 @@ DAISY_USER_NAME = 'Daisy IA'
 
 Os palpites da Daisy são salvos na classe `predict2026.guesses` com `user._id = DAISY_USER_ID`, igual a qualquer outro usuário. No ranking, a linha da Daisy é destacada em roxo (`bg-violet-50`, avatar 🤖).
 
-### Fluxo de geração (admin)
+### Fluxo de geração do diário (admin)
 
-1. Admin acessa `/admin/daisy` e opcionalmente cola notícias do dia
-2. POST para `/api/admin/daisy` chama `generateDailyDiary()`
-3. `diaryService` carrega prompts do SYDLE, jogos recentes, ranking e jogos futuros
-4. Claude gera JSON `{ title, subtitle, content }` para o diário
-5. Claude gera array `[{ gameId, result1, result2 }]` para palpites das próximas 24h
-6. Diário salvo em `daisyDiary` via `_create`; palpites salvos em `predict2026.guesses`
-7. Admin pode desativar entradas via toggle (PATCH `/api/admin/daisy`)
+1. Admin acessa `/admin/daisy` e clica em "Gerar Diário"
+2. POST `/api/admin/daisy/generate-diary` → `generateDailyDiary()` em `lib/daisy/diaryService.ts`
+3. Busca paralela no SYDLE + fontes externas:
+   - Todos os jogos (até 200, `game`) — base do gameMap e dos próximos jogos
+   - Todos os resultados (até 200, `results`) — detecta jogos encerrados recentemente
+   - Todos os palpites (até 1000, `guesses`) — calcula ranking top 10
+   - Últimos 3 diários gerados (`getMostRecentDiaries(3)`) — referência editorial para evitar repetição
+   - Mapa de países (`fetchCountryMap`) — resolve nomes a partir de IDs
+   - Todos os prompts SYDLE (`getAllPrompts`) — persona, diary, guesses, análise de jogos, resumo de notícias
+   - Notícias externas → `fetchAndSummarizeNews()` → resumidas com `DAISY_NEWS_SUMMARY`
+
+4. **Janela de resultados recentes** — define quais jogos encerrados são "novidade":
+   - Janela = desde a data do último diário gerado, ou últimas 48h (o que for mais amplo)
+   - Itera pelos **resultados** (não pelos jogos) e cruza com o gameMap — garante cobertura de todos os 200 jogos
+   - Jogos com `date > now` (futuros) são excluídos mesmo que tenham resultado cadastrado
+
+5. **Montagem do prompt** — contextos injetados na user message do OpenAI:
+   - Se há resultados recentes: bloco `⚠️ JOGOS ENCERRADOS RECENTEMENTE` com instrução obrigatória de comentar no início do post
+   - Jogos já acontecidos sem resultado no sistema (para Daisy comentar via notícias)
+   - Histórico de até 10 resultados anteriores como referência
+   - Próximos jogos: filtro client-side `date > now`, top 15 por ordem cronológica
+   - Top 10 ranking: calculado em runtime somando pontos de todos os palpites vs resultados
+   - Resumo de notícias externas
+   - Excertos dos 3 últimos diários (300 chars cada) com instrução "use apenas como referência editorial"
+
+6. OpenAI gera JSON `{ title, subtitle, content }` usando `personaPrompt` como system + contexto montado como user message
+
+7. **Validação obrigatória** — se havia resultados recentes, verifica se a IA mencionou ao menos um dos times no conteúdo gerado. Se não mencionou: **não salva e retorna erro** com `validationError` no response
+
+8. Diário salvo em `daisyDiary` via `_create` com `active: false`
+
+9. Como etapa bônus (não-fatal), gera palpites da Daisy para os próximos jogos usando `DAISY_MATCH_ANALYSIS` + `DAISY_DAILY_GUESSES`
+
+10. Admin revisa, faz preview e ativa manualmente — ou exclui se necessário
+
+### Fluxo de geração de palpites autônomos (admin)
+
+Separado do diário — pode ser acionado independentemente:
+
+1. POST `/api/admin/daisy/generate-guesses` → `generateAndSaveDaisyGuesses()`
+2. Fase 1 (paralelo): prompts + jogos próximas 24h + todos jogos/resultados + countryMap
+3. Fase 2: notícias → `fetchAndSummarizeNews()` → summary
+4. Fase 3: `analyzeUpcomingMatches()` com prompt `DAISY_MATCH_ANALYSIS` → análise por jogo
+5. Fase 4: OpenAI (prompt `DAISY_DAILY_GUESSES`) com contexto de análises + notícias → palpites
+6. Palpites salvos via `saveDaisyGuesses()` (cria ou atualiza com `_update`)
 
 ### Rotas administrativas
 
@@ -350,8 +404,16 @@ Os palpites da Daisy são salvos na classe `predict2026.guesses` com `user._id =
 |---|---|---|
 | `/api/admin/daisy` | GET | Lista todos os diários (inclusive inativos) |
 | `/api/admin/daisy` | PATCH | Alterna ativo/inativo de uma entrada |
-| `/api/admin/daisy/test-ai` | POST | Testa conexão com OpenAI (sem criar diário) — retorna `DaisyAITestResult` |
-| `/api/admin/daisy/generate-diary` | POST | Gera nova entrada completa — retorna `GenerateDiaryResult` |
+| `/api/admin/daisy` | DELETE | Exclui entrada **inativa** (rejeita com 422 se ativa) |
+| `/api/admin/daisy/test-ai` | POST | Testa conexão com OpenAI — retorna `DaisyAITestResult` |
+| `/api/admin/daisy/generate-diary` | POST | Gera nova entrada do diário — retorna `GenerateDiaryResult` |
+| `/api/admin/daisy/generate-guesses` | POST | Gera palpites autônomos para as próximas 24h — retorna `GenerateGuessesResult` |
+
+### Rota pública de palpites por jogo
+
+| Rota | Método | Descrição |
+|---|---|---|
+| `/api/matches/[id]/guesses` | GET | Retorna palpites de todos os participantes de uma partida. **403** se o jogo ainda não fechou. Inclui `isDaisy`, `outcome` e `points` calculados. |
 
 ### aiClient — uso correto
 
