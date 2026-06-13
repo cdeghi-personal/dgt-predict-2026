@@ -90,7 +90,7 @@ export async function generateDailyDiary(token: string): Promise<GenerateDiaryRe
   const lastDiaryTs = recentDiaries[0]?.createdAt
     ? new Date(recentDiaries[0].createdAt).getTime()
     : last24h
-  const recentCutoff = Math.min(lastDiaryTs, last48h)   // maior janela (timestamp mais antigo)
+  const recentCutoff = Math.max(lastDiaryTs, last48h)   // só jogos após o último diário (fallback: 48h)
 
   // ── FIX: visão RESULTADO-PRIMEIRO ───────────────────────────────────────────
   // Antes: iterava jogos e buscava resultado → perdia jogos fora dos top-50 por data
